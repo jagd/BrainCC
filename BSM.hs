@@ -2,15 +2,35 @@
 
 Brainf**k Stack Machine Language
 
+The whole memory is a chain of the 'Memory Unit'
+
+The structure of a Memory Unit:
+
+@
++--------------------------------------------------+
+| Offset        Field                              |
++--------------------------------------------------+
+| 0             value of the variable              |
+|                                                  |
+| 1             stack top/bottom flag (see later)  |
+|               top (rightmost) will be set to 0   |
+|               bottom (leftmost) is -1            |
+|               otherwise, a small positive number |
+|                                                  |
+| 2             temporary variable                 |
++--------------------------------------------------+
+@
+
+
 At the End of each operations, the memory pointer will be aligned at the first
 element of a 'Memory Unit'
+
 
 -}
 
 module BSM where
 
 import Control.Monad.Writer
-import Control.Monad (forM_)
 
 type CodeGen = Writer String ()
 
@@ -30,17 +50,22 @@ begin :: CodeGen
       -- ^ Init procedure for the user code (e.g. global variable allocation)
       -> CodeGen
 begin m = do
-        varInit 1 -- the jump register
-        m -- user init code
-        raw "[" -- start the global loop
+          varBottom
+          varFirst 1 -- the jump register
+          m -- user init code
+          raw "[" -- start the global loop
     where
-      -- | the first global variable
-      varInit :: Int -> CodeGen
-      varInit n = do
-                  raw "[-]" -- clean the value
-                  loop n $ raw "+" -- set the value to n
-                  raw ">[-]" -- set the stack bottom flag
-                  raw "<" -- return to the align cell
+      -- the variable, reserved for the stack bottom
+      varBottom :: CodeGen
+      varBottom = do
+                  raw ">[-]-" -- set the stack bottom flag
+                  -- return to the next cell and align
+                  loop (unitElements - 1) $ raw ">"
+      -- the variable, reserved for the stack bottom
+      varFirst n = do
+                   raw "[-]" -- clear the value
+                   loop n $ raw "+" -- set the value
+                   raw ">[-]<" -- set the stack top flag and align
 
 -- | see the function `begin`
 end :: CodeGen
@@ -50,10 +75,12 @@ end = stackFirst
 -- | jump the first (leftmost) element of the Stack
 stackFirst :: CodeGen
 stackFirst = do
-             raw ">[" -- move to the flag cell
+             raw ">+[-" -- move to the flag cell, and look whether it was -1
              -- move left with the length of a Memory Unit
              loop unitElements $ raw "<"
-             raw "]<" -- align
+             raw "+]-" -- untill the -1 mark, reset it to -1
+             -- skip the reserved Unit with align
+             loop (unitElements - 1) $ raw ">"
 
 -- | jump the last (rightmost) element of the Stack
 stackLast :: CodeGen
@@ -76,16 +103,20 @@ var :: Int
     -> CodeGen
 var n = do
         stackLast
-        raw ">+" -- move to the stack flag
-        loop (unitElements - 1) $ raw "+" -- clean the stack top flag
+        raw ">+" -- move to the stack flag & clean it
+        loop (unitElements - 1) $ raw ">" -- move to the next Unit
         raw "[-]" -- reset the value
         loop n $ raw "+" -- set the value
-        raw ">[-]" -- set the stack top flag
-        raw "<<" -- return to the value cell
+        raw ">[-]<" -- set the stack top flag & align
+
+-- | push a char into the stack
+pushChar :: Char
+    -- ^ the value of this variable
+    -> CodeGen
+pushChar = var . fromEnum
+
 
 {------------------------------------------------------------------------------}
--- * translation
-
 -- * translation
 
 -- | generate the Brainf**k Code
