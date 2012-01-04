@@ -98,22 +98,22 @@ raw :: String
 raw = tell
 
 -- | allocate a new variable at the top of the stack
-var :: Int
-    -- ^ the value of this variable
-    -> CodeGen
-var n = do
-        stackLast
-        raw ">+" -- move to the stack flag & clean it
-        loop (unitElements - 1) $ raw ">" -- move to the next Unit
-        raw "[-]" -- reset the value
-        loop n $ raw "+" -- set the value
-        raw ">[-]<" -- set the stack top flag & align
+newVar :: Int
+       -- ^ the value of this variable
+       -> CodeGen
+newVar n = do
+           stackLast
+           raw ">+" -- move to the stack flag & clean it
+           loop (unitElements - 1) $ raw ">" -- move to the next Unit
+           raw "[-]" -- reset the value
+           loop n $ raw "+" -- set the value
+           raw ">[-]<" -- set the stack top flag & align
 
 -- | push a char into the stack
 pushChar :: Char
     -- ^ the value of this variable
     -> CodeGen
-pushChar = var . fromEnum
+pushChar = newVar . fromEnum
 
 
 {------------------------------------------------------------------------------}
