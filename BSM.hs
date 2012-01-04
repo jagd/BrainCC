@@ -127,6 +127,18 @@ pushChar :: Char
     -> CodeGen
 pushChar = newVar . fromEnum
 
+
+stackDrop :: Int
+          -- ^ How many Units at the stack top will be droped
+          -- this number will not be checked!
+          -> CodeGen
+stackDrop n = do
+              stackLast
+              raw ">" -- move to the stack flag cell
+              loop (n * unitElements) $ raw "<"
+              raw "[-]<" -- set the top flag & align
+
+
 -- | goto the n\'st variable, backwards, \'n\' starts from 0
 lastVar :: Int
         -- ^ the \'n\'
