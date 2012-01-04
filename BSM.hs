@@ -2,9 +2,9 @@
 
 Brainf**k Stack Machine Language
 
-The whole memory is a chain of the 'Memory Unit'
+The whole memory is a chain of the \'Memory Unit\'
 
-The structure of a Memory Unit:
+The structure of a \'Memory Unit\':
 
 @
 +--------------------------------------------------+
@@ -44,6 +44,7 @@ unitElements = 3
 {------------------------------------------------------------------------------}
 -- * operations
 
+-- ** the framework
 
 -- | init the framework
 begin :: CodeGen
@@ -72,7 +73,7 @@ end :: CodeGen
 end = stackFirst
    >> raw "]"
 
--- | jump the first (leftmost) element of the Stack
+-- | jump the first (leftmost) element of the Stack ( the jump register )
 stackFirst :: CodeGen
 stackFirst = do
              raw ">+[-" -- move to the flag cell, and look whether it was -1
@@ -97,6 +98,17 @@ raw :: String
     -> CodeGen
 raw = tell
 
+
+-- ** variable operations: define , assign , modify , delete , move to
+
+-- | decreasing the current variable
+dec :: CodeGen
+dec = raw "-"
+
+-- | increasing the current variable
+inc :: CodeGen
+inc = raw "+"
+
 -- | allocate a new variable at the top of the stack
 newVar :: Int
        -- ^ the value of this variable
@@ -115,6 +127,21 @@ pushChar :: Char
     -> CodeGen
 pushChar = newVar . fromEnum
 
+-- | goto the n\'st variable, backwards, \'n\' starts from 0
+lastVar :: Int
+        -- ^ the \'n\'
+        -> CodeGen
+lastVar n = do
+            stackLast
+            loop (n * unitElements) $ raw "<"
+
+-- | goto the n\'st variable, forwards, \'n\' = 0 means the jump register
+globalVar :: Int
+          -- ^ the \'n\'
+          -> CodeGen
+globalVar n = do
+              stackFirst
+              loop (n * unitElements) $ raw ">"
 
 {------------------------------------------------------------------------------}
 -- * translation
