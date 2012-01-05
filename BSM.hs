@@ -213,7 +213,9 @@ setVar v n = gotoVar v >> setCurVar n
 incConstant :: Int
             -- ^ the constant Integer to be added
             -> CodeGen
-incConstant n = loop n $ raw "+" -- for debug, otherwise with wrapped forms
+incConstant n | n > 0 = loop n $ raw "+"
+              | n < 0 = incConstant (-n)
+              | otherwise = return ()
 
 
 -- | equivalent as in C: @ a += b @.
@@ -271,8 +273,8 @@ _assign op a b
 -- | perform logical AND on two variables,
 --   the result will be a new variable at the stack top.
 --   Finally located at the stack top /Unit/ (the result)
-doLogAnd :: Variable -> Variable -> CodeGen
-doLogAnd a b =
+doLogAND :: Variable -> Variable -> CodeGen
+doLogAND a b =
         do
           newVar 0
           raw ">>[-]<<" -- res's temp = 0
@@ -291,13 +293,40 @@ doLogAnd a b =
           raw "]" -- endif (res) , equivalent to endif (far)
           raw ">>[-<<+>>]<<" -- copy res's tmp to res
 
+-- | perform logical OR on two variables,
+--   the result will be a new variable at the stack top.
+--   Finally located at the stack top /Unit/ (the result)
+doLogOR :: Variable -> Variable -> CodeGen
+doLogOR a b =
+        do
+          newVar 0
+          raw ">>[-]<<" -- res's temp := 0
+          let res = LocalVar 0 -- result
+              a' = amendVar 1 a
+              b' = amendVar 1 b
+              far = max a' b' -- optimization
+              near = min a' b'
+          -- @ res
+          gotoVar near
+          raw "[" -- if (near)
+          gotoVar res
+          raw ">>+<<"
+          raw "]"
+          gotoVar far
+          raw "[" -- if (far)
+          gotoVar res
+          raw ">>+<<"
+          raw "]"
+          gotoVar res -- until now, res == 0
+          raw ">>[[-]<<+>>]<<"
 
 {------------------------------------------------------------------------------}
 -- * Translation
 
 -- | generate the Brainf**k Code
 genCode :: CodeGen -> String
-genCode = pretty . optimizationSimple . execWriter
+-- genCode = pretty . optimizationSimple . execWriter
+genCode = pretty . execWriter
 
 -- | format the code as a block
 pretty :: String -> String
