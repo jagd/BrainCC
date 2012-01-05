@@ -226,6 +226,28 @@ incConstant n | n > 0 = loop n $ raw "+"
               | otherwise = return ()
 
 
+-- | @a = b@
+assign :: Variable
+       -- ^ a
+       -> Variable
+       -- ^ b
+       -> CodeGen
+assign a b = do
+             clearVar a
+             assignAdd a b
+
+-- | @v = 0@
+clearVar :: Variable
+         -- ^ v
+         -> CodeGen
+clearVar v = do
+             gotoVar v
+             clearCurr
+
+-- | clear the current /Cell/
+clearCurr :: CodeGen
+clearCurr = raw "[-]"
+
 -- | equivalent as in C: @ a += b @.
 --   finally goto the variable @b@
 assignAdd :: Variable
