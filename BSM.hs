@@ -48,10 +48,9 @@ loop n m = m >> loop (n-1) m
 -- | Number of Cells in each /Memory Unit/ (as a constant)
 unitElements = 3
 
-
 data Variable = LocalVar { localOffset :: Int }
               | GlobalVar { globalOffset :: Int }
-              deriving (Eq)
+              deriving (Eq, Ord)
 
 
 {------------------------------------------------------------------------------}
@@ -278,8 +277,10 @@ doLogAnd a b =
           newVar 0
           raw ">>[-]<<" -- res's temp = 0
           let res = LocalVar 0 -- result
-              far = amendVar 1 a -- FIXME: far , near
-              near = amendVar 1 b
+              a' = amendVar 1 a
+              b' = amendVar 1 b
+              far = max a' b' -- optimization
+              near = min a' b'
           assignAdd res far
           gotoVar res
           raw "[" -- if (res) , equivalent to if (far)
@@ -296,7 +297,7 @@ doLogAnd a b =
 
 -- | generate the Brainf**k Code
 genCode :: CodeGen -> String
-genCode = pretty . optimationSimple . execWriter
+genCode = pretty . optimizationSimple . execWriter
 
 -- | format the code as a block
 pretty :: String -> String
@@ -308,10 +309,10 @@ pretty code =
       (line, rest) = splitAt 80 code
       eol = "\n"
 
--- | a simple object code optimation,
+-- | a simple object code optimaztion,
 --   it eliminates the sequences of \"@\<\>@\" and \"@+-@\"
-optimationSimple :: String -> String
-optimationSimple s = mergeRest
+optimizationSimple :: String -> String
+optimizationSimple s = mergeRest
                    $ foldl' f (('#', 0), "")
                    $ filter (`elem` "<>+-.,[]") s
         where
@@ -342,7 +343,8 @@ optimationSimple s = mergeRest
 
           f (('#', _), s) c = ((c, 1), s)
           f ((c1, 1), s) c2 = ((c2, 1), s ++ [c1])
-          f state _ = error $ "Error occurs by optimation: unmatched "
-                           ++ show state
+          f state _ = error
+                    $ "Error occurs by simple optimization: unmatched "
+                    ++ show state
 
           mergeRest state = snd $ f state '#'
