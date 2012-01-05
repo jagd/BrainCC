@@ -81,7 +81,7 @@ begin m = do
                    incConstant n -- set the value
                    raw ">[-]<" -- set the stack top flag and align
 
--- | see the function `begin`
+-- | see the function `begin`, it only requires aligned at any arbitrary /Unit/
 end :: CodeGen
 end = stackFirst
    >> raw "]"
@@ -114,7 +114,7 @@ raw = tell
 
 -- ** Variable operations: define , assign , modify , delete , move to
 
--- | allocate a new variable at the top of the stack
+-- | allocate a new variable at the top of the stack and move the current Unit to it
 newVar :: Int
        -- ^ the value of this variable
        -> CodeGen
@@ -126,7 +126,7 @@ newVar n = do
            incConstant n -- set the value
            raw ">[-]<" -- set the stack top flag & align
 
--- | push a char into the stack
+-- | push a char into the stack and goto it
 pushChar :: Char
     -- ^ the value of this variable
     -> CodeGen
@@ -147,8 +147,9 @@ stackEnlarge n = do
 
 
 stackDrop :: Int
-          -- ^ How many /Unit/s at the stack top will be droped
-          -- this number will not be checked!
+          -- ^ How many /Unit/s at the stack top will be droped (deleted)
+          --   and goto the stack top
+          --   this number will not be checked!
           -> CodeGen
 stackDrop n = do
               stackLast
@@ -180,6 +181,7 @@ amendVar :: Int
 amendVar _ v@(GlobalVar _) = v
 amendVar n (LocalVar x) = LocalVar (x+n)
 
+-- | finally goto the /jump/ variable
 setJump :: Int
         -- ^ Jump to
         -> CodeGen
@@ -202,7 +204,8 @@ incConstant :: Int
             -> CodeGen
 incConstant n = loop n $ raw "+" -- for debug, otherwise with wrapped forms
 
--- | equivalent as in C: @ a += b @
+-- | equivalent as in C: @ a += b @.
+--   finally goto the variable @b@
 assignAdd :: Variable
           -- ^ a
           -> Variable
@@ -210,7 +213,8 @@ assignAdd :: Variable
           -> CodeGen
 assignAdd = _assign (raw "+")
 
--- | equivalent as in C: @ a -= b @
+-- | equivalent as in C: @ a -= b @.
+--   finally goto the variable @b@
 assignMinus :: Variable
           -- ^ a
           -> Variable
@@ -219,6 +223,7 @@ assignMinus :: Variable
 assignMinus = _assign (raw "-")
 
 -- | the low-level assign: @ a = f(b) @
+--   finally goto the variable @b@
 _assign :: CodeGen
         -- ^ the mapping f
         -> Variable
@@ -250,6 +255,28 @@ _assign op a b
                 raw "]"
                 gotoVar b -- to recover b's original value
                 raw ">>[-<<+>>]<<"
+
+-- | perform logical AND on two variables,
+--   the result will be a new variable at the stack top.
+--   Finally located at the stack top /Unit/ (the result)
+doLogAnd :: Variable -> Variable -> CodeGen
+doLogAnd a b =
+        do
+          newVar 0
+          raw ">>[-]<<" -- res's temp = 0
+          let res = LocalVar 0 -- result
+              far = amendVar 1 a -- FIXME: far , near
+              near = amendVar 1 b
+          assignAdd res far
+          gotoVar res
+          raw "[" -- if (res) , equivalent to if (far)
+          raw "[-]" -- res := 0
+          assignAdd res near
+          gotoVar res
+          raw "[->>+<<][-]" -- copy res to res'tmp, then res := 0
+          raw "]" -- endif (res) , equivalent to endif (far)
+          raw ">>[-<<+>>]<<" -- copy res's tmp to res
+
 
 {------------------------------------------------------------------------------}
 -- * Translation
