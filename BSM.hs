@@ -203,6 +203,14 @@ dec = raw "-"
 inc :: CodeGen
 inc = raw "+"
 
+-- | output a char in the current variable
+output :: CodeGen
+output = raw "."
+
+-- | input a char in the current variable
+input :: CodeGen
+input = raw ","
+
 setCurVar :: Int -> CodeGen
 setCurVar n = raw "[-]" >> incConstant n
 
@@ -346,8 +354,7 @@ doLogNOT v = do
 
 -- | generate the Brainf**k Code
 genCode :: CodeGen -> String
--- genCode = pretty . optimizationSimple . execWriter
-genCode = pretty . execWriter
+genCode = pretty . optimizationSimple . execWriter
 
 -- | format the code as a block
 pretty :: String -> String
