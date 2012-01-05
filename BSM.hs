@@ -170,7 +170,7 @@ gotoVar (GlobalVar n) = do
 
 
 
--- | fix a old variable due to the extra offset from the new allocated variables
+-- | fix a old variable due to extra offset from the new allocated variables
 amendVar :: Int
          -- ^ how many new variables was allocated after the variable @a@
          -> Variable
