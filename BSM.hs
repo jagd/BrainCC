@@ -182,7 +182,7 @@ amendVar n (LocalVar x) = LocalVar (x+n)
 
 -- | finally goto the /jump/ variable
 setJump :: Int
-        -- ^ Jump to
+        -- ^ which subprogram to jump into
         -> CodeGen
 setJump n = do
           stackFirst
@@ -211,10 +211,27 @@ output = raw "."
 input :: CodeGen
 input = raw ","
 
+-- | @v = 0@
+clearVar :: Variable
+         -- ^ v
+         -> CodeGen
+clearVar v = do
+             gotoVar v
+             clearCurr
+
+-- | clear the current /Cell/
+clearCurr :: CodeGen
+clearCurr = raw "[-]"
+
 setCurVar :: Int -> CodeGen
 setCurVar n = raw "[-]" >> incConstant n
 
-setVar :: Variable -> Int -> CodeGen
+-- | @v = c@ @c@ is a constant
+setVar :: Variable
+       -- ^ the variable @v@
+       -> Int
+       -- ^ the constant @c@
+       -> CodeGen
 setVar v n = gotoVar v >> setCurVar n
 
 -- | add a constant to che current /Cell/
@@ -235,18 +252,6 @@ assign :: Variable
 assign a b = do
              clearVar a
              assignAdd a b
-
--- | @v = 0@
-clearVar :: Variable
-         -- ^ v
-         -> CodeGen
-clearVar v = do
-             gotoVar v
-             clearCurr
-
--- | clear the current /Cell/
-clearCurr :: CodeGen
-clearCurr = raw "[-]"
 
 -- | equivalent as in C: @ a += b @.
 --   finally goto the variable @b@
