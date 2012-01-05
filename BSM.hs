@@ -190,6 +190,12 @@ setJump n = do
           raw "[-]" -- clear
           incConstant n -- set
 
+-- | Do not invoke any functions or goto some where.
+--   The program will exit at the end.
+--   (Finally goto the /jump/ variable)
+clearJump :: CodeGen
+clearJump = setJump 0
+
 -- | decreasing the current variable
 dec :: CodeGen
 dec = raw "-"
@@ -198,11 +204,18 @@ dec = raw "-"
 inc :: CodeGen
 inc = raw "+"
 
+setCurVar :: Int -> CodeGen
+setCurVar n = raw "[-]" >> incConstant n
+
+setVar :: Variable -> Int -> CodeGen
+setVar v n = gotoVar v >> setCurVar n
+
 -- | add a constant to che current /Cell/
 incConstant :: Int
             -- ^ the constant Integer to be added
             -> CodeGen
 incConstant n = loop n $ raw "+" -- for debug, otherwise with wrapped forms
+
 
 -- | equivalent as in C: @ a += b @.
 --   finally goto the variable @b@
