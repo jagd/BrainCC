@@ -106,20 +106,6 @@ raw = tell
 
 -- ** variable operations: define , assign , modify , delete , move to
 
--- | decreasing the current variable
-dec :: CodeGen
-dec = raw "-"
-
--- | increasing the current variable
-inc :: CodeGen
-inc = raw "+"
-
-
-incConstant :: Int
-            -- ^ the constant Integer to be added
-            -> CodeGen
-incConstant n = loop n $ raw "+" -- for debug, otherwise with wrapped forms
-
 -- | allocate a new variable at the top of the stack
 newVar :: Int
        -- ^ the value of this variable
@@ -168,6 +154,19 @@ setJump n = do
           stackFirst
           raw "[-]" -- clear
           incConstant n -- set
+
+-- | decreasing the current variable
+dec :: CodeGen
+dec = raw "-"
+
+-- | increasing the current variable
+inc :: CodeGen
+inc = raw "+"
+
+incConstant :: Int
+            -- ^ the constant Integer to be added
+            -> CodeGen
+incConstant n = loop n $ raw "+" -- for debug, otherwise with wrapped forms
 
 {------------------------------------------------------------------------------}
 -- * translation
