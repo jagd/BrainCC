@@ -330,6 +330,17 @@ curLogNOT = do
             -- if (temp) ~~~~ if (!curr.old) then curr = 1 else keep 0
             raw ">>[<<+>>+]<<"
 
+-- | perform logical OR on variable,
+--   the result will be a new variable at the stack top.
+--   Finally located at the stack top /Unit/ (the result)
+doLogNOT :: Variable -> CodeGen
+doLogNOT v = do
+             newVar 0
+             let v' = amendVar 1 v
+             assignAdd (LocalVar 0) v'
+             stackLast
+             curLogNOT
+
 {------------------------------------------------------------------------------}
 -- * Translation
 
