@@ -41,6 +41,11 @@ loop n m = m >> loop (n-1) m
 -- | Number of Cells in each Memory Unit (as a constant)
 unitElements = 3
 
+
+data Variable = LocalVar { localOffset :: Int }
+              | GlobalVar { globalOffset :: Int }
+
+
 {------------------------------------------------------------------------------}
 -- * operations
 
@@ -145,21 +150,16 @@ stackDrop n = do
               raw "[-]<" -- set the top flag & align
 
 
--- | goto the n\'st variable, backwards, \'n\' starts from 0
-lastVar :: Int
-        -- ^ the \'n\'
-        -> CodeGen
-lastVar n = do
-            stackLast
-            loop (n * unitElements) $ raw "<"
-
--- | goto the n\'st variable, forwards, \'n\' = 0 means the jump register
-globalVar :: Int
-          -- ^ the \'n\'
-          -> CodeGen
-globalVar n = do
-              stackFirst
-              loop (n * unitElements) $ raw ">"
+-- | goto the n\'st variable, forwards or backwards,
+--   global variable \'n\' = 0 means the jump register
+--   local variable \'n\' = 0 means the stack top unit
+gotoVar :: Variable -> CodeGen
+gotoVar (LocalVar n) = do
+        stackLast
+        loop (n * unitElements) $ raw "<"
+gotoVar (GlobalVar n) = do
+        stackFirst
+        loop (n * unitElements) $ raw ">"
 
 setJump :: Int
         -- ^ Jump to
