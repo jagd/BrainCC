@@ -47,9 +47,9 @@ data Variable = LocalVar { localOffset :: Int }
 
 
 {------------------------------------------------------------------------------}
--- * operations
+-- * Operations
 
--- ** the framework
+-- ** The framework
 
 -- | init the framework
 begin :: CodeGen
@@ -104,7 +104,7 @@ raw :: String
 raw = tell
 
 
--- ** variable operations: define , assign , modify , delete , move to
+-- ** Variable operations: define , assign , modify , delete , move to
 
 -- | allocate a new variable at the top of the stack
 newVar :: Int
@@ -168,8 +168,28 @@ incConstant :: Int
             -> CodeGen
 incConstant n = loop n $ raw "+" -- for debug, otherwise with wrapped forms
 
+-- | a += b
+assignAdd :: Variable
+          -- ^ a
+          -> Variable
+          -- ^ b
+          -> CodeGen
+assignAdd a b = do
+               gotoVar b
+               -- clear the temporary cell of var b & align
+               raw ">>[-]<<"
+               raw "[" -- copy loop
+               raw "->>+<<" -- copy to var b's temp
+               gotoVar a
+               raw "+" -- copy to var a
+               gotoVar b
+               raw "]"
+               gotoVar b -- to recover b's original value
+               raw ">>[-<<+>>]<<"
+
+
 {------------------------------------------------------------------------------}
--- * translation
+-- * Translation
 
 -- | generate the Brainf**k Code
 genCode :: CodeGen -> String
