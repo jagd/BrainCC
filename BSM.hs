@@ -124,6 +124,19 @@ pushChar :: Char
     -> CodeGen
 pushChar = newVar . fromEnum
 
+stackEnlarge :: Int
+             -- ^ Number of addition Units
+             -> CodeGen
+stackEnlarge n = do
+        stackLast
+        raw ">" -- move to the stack flag
+        loop n f
+        raw "<" -- align
+    where f = do
+              raw "+" -- clean stack top flag
+              loop (unitElements) $ raw ">" -- move to the next Unit
+              raw "[-]" -- set the stack top flag
+
 
 stackDrop :: Int
           -- ^ How many Units at the stack top will be droped
@@ -168,7 +181,7 @@ incConstant :: Int
             -> CodeGen
 incConstant n = loop n $ raw "+" -- for debug, otherwise with wrapped forms
 
--- | a += b
+-- | equivalent as in C: @ a += b @
 assignAdd :: Variable
           -- ^ a
           -> Variable
