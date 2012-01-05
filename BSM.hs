@@ -2,9 +2,12 @@
 
 Brainf**k Stack Machine Language
 
-The whole memory is a chain of the \'Memory Unit\'
+In this text, /Cell/ means a Brainf**k memory element and /Unit/
+means the following basic memory structure.
 
-The structure of a \'Memory Unit\':
+The whole memory is a chain of the /Memory Unit/
+
+The structure of a /Memory Unit/:
 
 @
 +--------------------------------------------------+
@@ -21,10 +24,13 @@ The structure of a \'Memory Unit\':
 +--------------------------------------------------+
 @
 
+The first /Unit/ is reserved, the second is a variable, that indicate,
+which subprogram to jump into.
 
-At the End of each operations, the memory pointer will be aligned at the first
-element of a 'Memory Unit'
+After the second /Unit/ follows the user stack.
 
+At the end of each operations, the memory pointer will be aligned at the first
+element of a /Memory Unit/.
 
 -}
 
@@ -39,7 +45,7 @@ loop :: (Num t, Monad m) => t -> m a -> m ()
 loop 0 _ = return ()
 loop n m = m >> loop (n-1) m
 
--- | Number of Cells in each Memory Unit (as a constant)
+-- | Number of Cells in each /Memory Unit/ (as a constant)
 unitElements = 3
 
 
@@ -126,7 +132,7 @@ pushChar :: Char
 pushChar = newVar . fromEnum
 
 stackEnlarge :: Int
-             -- ^ Number of addition Units
+             -- ^ Number of addition /Unit/s
              -> CodeGen
 stackEnlarge n = do
         stackLast
@@ -140,7 +146,7 @@ stackEnlarge n = do
 
 
 stackDrop :: Int
-          -- ^ How many Units at the stack top will be droped
+          -- ^ How many /Unit/s at the stack top will be droped
           -- this number will not be checked!
           -> CodeGen
 stackDrop n = do
@@ -152,7 +158,7 @@ stackDrop n = do
 
 -- | goto the n\'st variable, forwards or backwards,
 --   global variable \'n\' = 0 means the jump register
---   local variable \'n\' = 0 means the stack top unit
+--   local variable \'n\' = 0 means the stack top /Unit/
 gotoVar :: Variable -> CodeGen
 gotoVar (LocalVar n) = do
         stackLast
@@ -177,6 +183,7 @@ dec = raw "-"
 inc :: CodeGen
 inc = raw "+"
 
+-- | add a constant to che current /Cell/
 incConstant :: Int
             -- ^ the constant Integer to be added
             -> CodeGen
