@@ -31,6 +31,7 @@ element of a 'Memory Unit'
 module BSM where
 
 import Control.Monad.Writer
+import Data.List (foldl')
 
 type CodeGen = Writer String ()
 
@@ -206,14 +207,53 @@ assignAdd a b = do
 
 -- | generate the Brainf**k Code
 genCode :: CodeGen -> String
-genCode = prettyCode . execWriter
+genCode = pretty . optimationSimple . execWriter
 
 -- | format the code as a block
-prettyCode :: String -> String
-prettyCode code =
+pretty :: String -> String
+pretty code =
         case rest of
              [] -> line ++ eol
-             _  -> line ++ eol ++ prettyCode rest
+             _  -> line ++ eol ++ pretty rest
     where
       (line, rest) = splitAt 80 code
       eol = "\n"
+
+-- | a simple object code optimation,
+--   it eliminates the sequences of \"@\<\>@\" and \"@+-@\"
+optimationSimple :: String -> String
+optimationSimple s = mergeRest
+                   $ foldl' f (('#', 0), "")
+                   $ filter (`elem` "<>+-.,[]") s
+        where
+          f :: ((Char, Int), String) -> Char -> ((Char, Int), String)
+          f (('<', i), s) '<' = (('<', i + 1), s)
+          f (('<', i), s) '>' = (('<', i - 1), s)
+          f (('<', i), s) c | i > 0 = ((c, 1), s ++ replicate i '<')
+                            | i < 0 = ((c, 1), s ++ replicate (-i) '>')
+                            | otherwise = ((c, 1), s)
+
+          f (('>', i), s) '>' = (('>', i + 1), s)
+          f (('>', i), s) '<' = (('>', i - 1), s)
+          f (('>', i), s) c | i > 0 = ((c, 1), s ++ replicate i '>')
+                            | i < 0 = ((c, 1), s ++ replicate (-i) '<')
+                            | otherwise = ((c, 1), s)
+
+          f (('+', i), s) '+' = (('+', i + 1), s)
+          f (('+', i), s) '-' = (('+', i - 1), s)
+          f (('+', i), s) c | i > 0 = ((c, 1), s ++ replicate i '+')
+                            | i < 0 = ((c, 1), s ++ replicate (-i) '-')
+                            | otherwise = ((c, 1), s)
+
+          f (('-', i), s) '-' = (('-', i + 1), s)
+          f (('-', i), s) '+' = (('-', i - 1), s)
+          f (('-', i), s) c | i > 0 = ((c, 1), s ++ replicate i '-')
+                            | i < 0 = ((c, 1), s ++ replicate (-i) '+')
+                            | otherwise = ((c, 1), s)
+
+          f (('#', _), s) c = ((c, 1), s)
+          f ((c1, 1), s) c2 = ((c2, 1), s ++ [c1])
+          f state _ = error $ "Error occurs by optimation: unmatched "
+                           ++ show state
+
+          mergeRest state = snd $ f state '#'
