@@ -51,6 +51,7 @@ unitElements = 3
 
 data Variable = LocalVar { localOffset :: Int }
               | GlobalVar { globalOffset :: Int }
+              deriving (Eq)
 
 
 {------------------------------------------------------------------------------}
@@ -195,19 +196,48 @@ assignAdd :: Variable
           -> Variable
           -- ^ b
           -> CodeGen
-assignAdd a b = do
-               gotoVar b
-               -- clear the temporary cell of var b & align
-               raw ">>[-]<<"
-               raw "[" -- copy loop
-               raw "->>+<<" -- copy to var b's temp
-               gotoVar a
-               raw "+" -- copy to var a
-               gotoVar b
-               raw "]"
-               gotoVar b -- to recover b's original value
-               raw ">>[-<<+>>]<<"
+assignAdd = _assign (raw "+")
 
+-- | equivalent as in C: @ a -= b @
+assignMinus :: Variable
+          -- ^ a
+          -> Variable
+          -- ^ b
+          -> CodeGen
+assignMinus = _assign (raw "-")
+
+-- | the low-level assign: @ a = f(b) @
+_assign :: CodeGen
+        -- ^ the mapping f
+        -> Variable
+        -- ^ a
+        -> Variable
+        -- ^ b
+        -> CodeGen
+_assign op a b
+        | (a == b) = do
+                gotoVar b
+                -- clear the temporary cell of var b & align
+                raw ">>[-]<<"
+                raw "[->>+<<]" -- copy from b to b's temp
+                raw ">>" -- goto b's temp
+                raw "[-<<" -- dec(b's temp) then return to b
+                raw "+" -- recover b's original value
+                op
+                raw ">>]" -- goto b's temp
+                raw "<<" -- align
+        | otherwise = do
+                gotoVar b
+                -- clear the temporary cell of var b & align
+                raw ">>[-]<<"
+                raw "[" -- copy loop
+                raw "->>+<<" -- copy to var b's temp
+                gotoVar a
+                op -- modify the var a with op
+                gotoVar b
+                raw "]"
+                gotoVar b -- to recover b's original value
+                raw ">>[-<<+>>]<<"
 
 {------------------------------------------------------------------------------}
 -- * Translation
