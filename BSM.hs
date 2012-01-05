@@ -320,6 +320,16 @@ doLogOR a b =
           gotoVar res -- until now, res == 0
           raw ">>[[-]<<+>>]<<"
 
+-- | perform logical NOT to the current /Unit/.
+-- This operation does not allocate new variables on the stack,
+-- but uses temp variables
+curLogNOT :: CodeGen
+curLogNOT = do
+            raw ">>[-]-<<" -- temp := -1
+            raw "[>>+<<[-]]" -- if (curr) then temp := 0 else temp keep -1
+            -- if (temp) ~~~~ if (!curr.old) then curr = 1 else keep 0
+            raw ">>[<<+>>+]<<"
+
 {------------------------------------------------------------------------------}
 -- * Translation
 
