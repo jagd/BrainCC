@@ -65,7 +65,7 @@ begin m = do
       -- the variable, reserved for the stack bottom
       varFirst n = do
                    raw "[-]" -- clear the value
-                   loop n $ raw "+" -- set the value
+                   incConstant n -- set the value
                    raw ">[-]<" -- set the stack top flag and align
 
 -- | see the function `begin`
@@ -109,6 +109,12 @@ dec = raw "-"
 inc :: CodeGen
 inc = raw "+"
 
+
+incConstant :: Int
+            -- ^ the constant Integer to be added
+            -> CodeGen
+incConstant n = loop n $ raw "+" -- for debug, otherwise with wrapped forms
+
 -- | allocate a new variable at the top of the stack
 newVar :: Int
        -- ^ the value of this variable
@@ -118,7 +124,7 @@ newVar n = do
            raw ">+" -- move to the stack flag & clean it
            loop (unitElements - 1) $ raw ">" -- move to the next Unit
            raw "[-]" -- reset the value
-           loop n $ raw "+" -- set the value
+           incConstant n -- set the value
            raw ">[-]<" -- set the stack top flag & align
 
 -- | push a char into the stack
@@ -154,6 +160,14 @@ globalVar :: Int
 globalVar n = do
               stackFirst
               loop (n * unitElements) $ raw ">"
+
+setJump :: Int
+        -- ^ Jump to
+        -> CodeGen
+setJump n = do
+          stackFirst
+          raw "[-]" -- clear
+          incConstant n -- set
 
 {------------------------------------------------------------------------------}
 -- * translation
