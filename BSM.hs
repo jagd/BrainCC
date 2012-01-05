@@ -168,6 +168,18 @@ gotoVar (GlobalVar n) = do
         stackFirst
         loop (n * unitElements) $ raw ">"
 
+
+
+-- | fix a old variable due to the extra offset from the new allocated variables
+amendVar :: Int
+         -- ^ how many new variables was allocated after the variable @a@
+         -> Variable
+         -- ^ the variable @a@, which will be amended
+         -> Variable
+         -- ^ the result variable
+amendVar _ v@(GlobalVar _) = v
+amendVar n (LocalVar x) = LocalVar (x+n)
+
 setJump :: Int
         -- ^ Jump to
         -> CodeGen
