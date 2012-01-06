@@ -21,6 +21,8 @@ The structure of a /Memory Unit/:
 |               otherwise, a small positive number |
 |                                                  |
 | 2             temporary variable                 |
+|                                                  |
+| 3             for pointer addressing             |
 +--------------------------------------------------+
 @
 
@@ -46,10 +48,17 @@ loop 0 _ = return ()
 loop n m = m >> loop (n-1) m
 
 -- | Number of Cells in each /Memory Unit/ (as a constant)
-unitElements = 3
+unitElements = 4
 
+
+-- | GlobalVar will be only used for global variables,
+--   do not mix it with LocalVar, or the assign will not work rightly.
 data Variable = LocalVar { localOffset :: Int }
               | GlobalVar { globalOffset :: Int }
+              | ArrayVar {
+                        arrayBase   :: Variable,
+                        arrayOffset :: Variable
+                }
               deriving (Eq, Ord)
 
 
@@ -159,7 +168,11 @@ stackDrop n = do
 
 -- | goto the n\'st variable, forwards or backwards,
 --   global variable \'n\' = 0 means the jump register
---   local variable \'n\' = 0 means the stack top /Unit/
+--   local variable \'n\' = 0 means the stack top /Unit/.
+--   For the ArrayVar: inorder to handle a variable like "x[x[i]]",
+--   the inner x[i] will be aissigned to a temporary /Unit/ (not a temperory
+--   /Cell/) on the stack top. So it could be very expensive
+-- FIXME: ArrayVar and when ArrayVar == LocalVar
 gotoVar :: Variable -> CodeGen
 gotoVar (LocalVar n) = do
         stackLast
@@ -243,16 +256,32 @@ incConstant n | n > 0 = loop n $ raw "+"
               | otherwise = return ()
 
 
--- | @a = b@
-assign :: Variable
+-- | @a = b@, please ensure, that a != b
+unsafeAssign :: Variable
        -- ^ a
        -> Variable
        -- ^ b
        -> CodeGen
-assign a b | a == b = return ()
-           | otherwise = do
-                         clearVar a
-                         assignAdd a b
+unsafeAssign a b | a == b = return ()
+                 | otherwise = do
+                               clearVar a
+                               assignAdd a b
+
+-- | @a = b@
+safeAssign :: Variable
+       -- ^ a
+       -> Variable
+       -- ^ b
+       -> CodeGen
+safeAssign a b | a == b = return ()
+               | otherwise = do
+                             newVar 0
+                             let a' = amendVar 1 a
+                                 b' = amendVar 1 b
+                             assignAdd (LocalVar 0) b'
+                             clearVar a
+                             assignAdd b (LocalVar 0)
+                             stackDrop 1
 
 -- | equivalent as in C: @ a += b @.
 --   finally goto the variable @b@
