@@ -274,14 +274,18 @@ safeAssign :: Variable
        -- ^ b
        -> CodeGen
 safeAssign a b | a == b = return ()
-               | otherwise = do
-                             newVar 0
-                             let a' = amendVar 1 a
-                                 b' = amendVar 1 b
-                             assignAdd (LocalVar 0) b'
-                             clearVar a
-                             assignAdd b (LocalVar 0)
-                             stackDrop 1
+safeAssign a@(LocalVar _) b@(LocalVar _) =  unsafeAssign a b
+safeAssign a@(GlobalVar _) b@(GlobalVar _) =  unsafeAssign a b
+safeAssign a b = do
+                 newVar 0
+                 let a' = amendVar 1 a
+                     b' = amendVar 1 b
+                 assignAdd (LocalVar 0) b'
+                 clearVar a
+                 assignAdd b (LocalVar 0)
+                 stackDrop 1
+-- a@(GlobalVar _) b@(LocalVar _) this situation is not suit for global
+-- pointers. So it belongs the last case.
 
 -- | equivalent as in C: @ a += b @.
 --   finally goto the variable @b@
