@@ -290,6 +290,7 @@ safeAssign a b = do
 
 -- | equivalent as in C: @ a += b @.
 --   finally goto the variable @b@
+-- FIXME: unsafe
 assignAdd :: Variable
           -- ^ a
           -> Variable
@@ -299,6 +300,7 @@ assignAdd = _assign (raw "+")
 
 -- | equivalent as in C: @ a -= b @.
 --   finally goto the variable @b@
+-- FIXME: unsafe
 assignMinus :: Variable
           -- ^ a
           -> Variable
@@ -306,12 +308,16 @@ assignMinus :: Variable
           -> CodeGen
 assignMinus = _assign (raw "-")
 
--- | @a = a && b@
+-- | @a = a && b@.
+--  /unsafe !!/ &a != &b
+--  finally locates at @a@
+-- FIXME: unsafe
 assignLogAND :: Variable
              -- ^ Variable @a@
              -> Variable
              -- ^ Variable @b@
              -> CodeGen
+assignLogAND a b | a == b = gotoVar a
 assignLogAND a b =
         do
           gotoVar a
@@ -330,6 +336,7 @@ assignLogAND a b =
 
 -- | the low-level assign: @ a = f(b) @
 --   finally goto the variable @b@
+-- FIXME: unsafe
 _assign :: CodeGen
         -- ^ the mapping f
         -> Variable
@@ -365,6 +372,8 @@ _assign op a b
 -- | perform logical AND on two variables,
 --   the result will be a new variable at the stack top.
 --   Finally located at the stack top /Unit/ (the result)
+-- FIXME: unsafe
+-- FIXME: rewrite for tri-argument
 doLogAND :: Variable -> Variable -> CodeGen
 doLogAND a b =
         do
@@ -388,6 +397,8 @@ doLogAND a b =
 -- | perform logical OR on two variables,
 --   the result will be a new variable at the stack top.
 --   Finally located at the stack top /Unit/ (the result)
+-- FIXME: unsafe
+-- FIXME: rewrite for tri-argument
 doLogOR :: Variable -> Variable -> CodeGen
 doLogOR a b =
         do
