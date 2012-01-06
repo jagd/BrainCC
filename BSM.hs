@@ -13,16 +13,17 @@ The structure of a /Memory Unit/:
 +--------------------------------------------------+
 | Offset        Field                              |
 +--------------------------------------------------+
-| 0             value of the variable              |
+| 0             value of this variable             |
 |                                                  |
 | 1             stack top/bottom flag (see later)  |
 |               top (rightmost) will be set to 0   |
-|               bottom (leftmost) is -1            |
-|               otherwise, a small positive number |
+|               bottom (leftmost) is -1,           |
+|               otherwise                          |
+|               a small positive number:           |
+|               in this case, it would be used as  |
+|               a flag for relative addressing.    |
 |                                                  |
 | 2             temporary variable                 |
-|                                                  |
-| 3             for pointer addressing             |
 +--------------------------------------------------+
 @
 
@@ -48,7 +49,7 @@ loop 0 _ = return ()
 loop n m = m >> loop (n-1) m
 
 -- | Number of Cells in each /Memory Unit/ (as a constant)
-unitElements = 4
+unitElements = 3
 
 
 -- | GlobalVar will be only used for global variables,
