@@ -249,9 +249,10 @@ assign :: Variable
        -> Variable
        -- ^ b
        -> CodeGen
-assign a b = do
-             clearVar a
-             assignAdd a b
+assign a b | a == b = return ()
+           | otherwise = do
+                         clearVar a
+                         assignAdd a b
 
 -- | equivalent as in C: @ a += b @.
 --   finally goto the variable @b@
@@ -270,6 +271,28 @@ assignMinus :: Variable
           -- ^ b
           -> CodeGen
 assignMinus = _assign (raw "-")
+
+-- | @a = a && b@
+assignLogAND :: Variable
+             -- ^ Variable @a@
+             -> Variable
+             -- ^ Variable @b@
+             -> CodeGen
+assignLogAND a b =
+        do
+          gotoVar a
+          raw ">>[-]<<" -- clear a's temp
+          raw "[[-]" -- if (a) then a := 0
+          gotoVar b
+          raw "[" -- if (b)
+          gotoVar a
+          raw ">>+<<" -- a's temp ++
+          raw "]" -- endif(b)
+          gotoVar a
+          raw "]" -- endif(a)
+          -- located at a
+          raw ">>[<<+>>-]<<" -- if (a's temp) then a++, temp-- ; else a = 0
+
 
 -- | the low-level assign: @ a = f(b) @
 --   finally goto the variable @b@
