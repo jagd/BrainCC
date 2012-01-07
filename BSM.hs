@@ -272,83 +272,6 @@ incConstant n | n > 0 = loop n $ raw "+"
               | otherwise = return ()
 
 
--- | @a = b@, please ensure, that a != b
-unsafeAssign :: Variable
-       -- ^ a
-       -> Variable
-       -- ^ b
-       -> CodeGen
-unsafeAssign a b | a == b = return ()
-                 | otherwise = do
-                               clearVar a
-                               _assignAdd a b
-
--- | @a = b@
-safeAssign :: Variable
-       -- ^ a
-       -> Variable
-       -- ^ b
-       -> CodeGen
-safeAssign a b | a == b = return ()
-safeAssign a@(LocalVar _) b@(LocalVar _) =  unsafeAssign a b
-safeAssign a@(GlobalVar _) b@(GlobalVar _) =  unsafeAssign a b
-safeAssign a b = do
-                 newVar 0
-                 let a' = amendVar 1 a
-                     b' = amendVar 1 b
-                 _assignAdd (LocalVar 0) b'
-                 clearVar a
-                 _assignAdd b (LocalVar 0)
-                 stackDrop 1
--- a@(GlobalVar _) b@(LocalVar _) this situation is not suit for global
--- pointers. So it belongs the last case.
-
--- | equivalent as in C: @ a += b @.
---   finally goto the variable @b@.
---   /unsafe/
-_assignAdd :: Variable
-          -- ^ a
-          -> Variable
-          -- ^ b
-          -> CodeGen
-_assignAdd = _assign (raw "+")
-
--- | equivalent as in C: @ a -= b @.
---   finally goto the variable @b@.
---   /unsafe/
-_assignMinus :: Variable
-          -- ^ a
-          -> Variable
-          -- ^ b
-          -> CodeGen
-_assignMinus = _assign (raw "-")
-
--- | @a = a && b@.
---  /unsafe !!/ @a@ and @b@ must be different variables
---  finally locates at @a@
---  /unsafe/
-_assignLogAND :: Variable
-             -- ^ Variable @a@
-             -> Variable
-             -- ^ Variable @b@
-             -> CodeGen
-_assignLogAND a b | a == b = gotoVar a
-_assignLogAND a b =
-        do
-          gotoVar a
-          raw ">>[-]<<" -- clear a's temp
-          raw "[[-]" -- if (a) then a := 0
-          gotoVar b
-          raw "[" -- if (b)
-          gotoVar a
-          raw ">>+<<" -- a's temp ++
-          raw "]" -- endif(b)
-          gotoVar a
-          raw "]" -- endif(a)
-          -- located at a
-          raw ">>[<<+>>-]<<" -- if (a's temp) then a++, temp-- ; else a = 0
-
-
 -- | the low-level assign: @ a = f(b) @
 --   finally goto the variable @b@
 --   /unsafe/
@@ -383,6 +306,114 @@ _assign op a b
                 raw "]"
                 gotoVar b -- to recover b's original value
                 raw ">>[-<<+>>]<<"
+
+-- | equivalent as in C: @ a += b @.
+--   finally goto the variable @b@.
+--   /unsafe/
+_assignAdd :: Variable
+          -- ^ a
+          -> Variable
+          -- ^ b
+          -> CodeGen
+_assignAdd = _assign (raw "+")
+
+-- | equivalent as in C: @ a -= b @.
+--   finally goto the variable @b@.
+--   /unsafe/
+_assignMinus :: Variable
+          -- ^ a
+          -> Variable
+          -- ^ b
+          -> CodeGen
+_assignMinus = _assign (raw "-")
+
+
+-- | @a = b@, please ensure, that a != b
+unsafeAssign :: Variable
+       -- ^ a
+       -> Variable
+       -- ^ b
+       -> CodeGen
+unsafeAssign a b | a == b = return ()
+                 | otherwise = do
+                               clearVar a
+                               _assignAdd a b
+
+-- | @a = b@
+safeAssign :: Variable
+       -- ^ a
+       -> Variable
+       -- ^ b
+       -> CodeGen
+safeAssign a b | a == b = return ()
+safeAssign a@(LocalVar _) b@(LocalVar _) =  unsafeAssign a b
+safeAssign a@(GlobalVar _) b@(GlobalVar _) =  unsafeAssign a b
+safeAssign a b = do
+                 newVar 0
+                 let a' = amendVar 1 a
+                     b' = amendVar 1 b
+                 _assignAdd (LocalVar 0) b'
+                 clearVar a
+                 _assignAdd b (LocalVar 0)
+                 stackDrop 1
+-- a@(GlobalVar _) b@(LocalVar _) this situation is not suit for global
+-- pointers. So it belongs the last case.
+
+
+-- | @a = a && b@.
+--  /unsafe !!/ @a@ and @b@ must be different variables
+--  finally locates at @a@
+--  /unsafe/
+_assignLogAND :: Variable
+             -- ^ Variable @a@
+             -> Variable
+             -- ^ Variable @b@
+             -> CodeGen
+_assignLogAND a b | a == b = gotoVar a
+_assignLogAND a b =
+        do
+          gotoVar a
+          raw ">>[-]<<" -- clear a's temp
+          raw "[[-]" -- if (a) then a := 0
+          gotoVar b
+          raw "[" -- if (b)
+          gotoVar a
+          raw ">>+<<" -- a's temp ++
+          raw "]" -- endif(b)
+          gotoVar a
+          raw "]" -- endif(a)
+          -- located at a
+          raw ">>[<<+>>-]<<" -- if (a's temp) then a++, temp-- ; else a = 0
+
+
+-- | perform logical AND on two variables,
+--   @result = a && b@
+doLogAND :: Variable
+         -- ^ @result@
+         -> Variable
+         -- ^ @a@
+         -> Variable
+         -- ^ @b@
+         -> CodeGen
+doLogAND r a b = do
+                 _doLogAND a b
+                 unsafeAssign (amendVar 1 r) (LocalVar 0)
+                 stackDrop 1
+
+-- | perform logical OR on two variables,
+--   @result = a || b@
+doLogOR :: Variable
+        -- ^ @result@
+        -> Variable
+        -- ^ @a@
+        -> Variable
+        -- ^ @b@
+        -> CodeGen
+doLogOR r a b = do
+                _doLogOR a b
+                unsafeAssign (amendVar 1 r) (LocalVar 0)
+                stackDrop 1
+
 
 -- | perform logical AND on two variables,
 --   the result will be a new variable at the stack top.
@@ -419,9 +450,8 @@ _doLogAND a b =
 
 -- | perform logical OR on two variables,
 --   the result will be a new variable at the stack top.
---   Finally located at the stack top /Unit/ (the result)
--- FIXME: unsafe
--- FIXME: rewrite
+--   Finally located at the stack top /Unit/ (the result).
+--   /unsafe/
 _doLogOR :: Variable -> Variable -> CodeGen
 _doLogOR a b =
         do
