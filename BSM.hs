@@ -129,6 +129,22 @@ raw :: String
     -> CodeGen
 raw = tell
 
+-- | finally goto the /jump/ variable
+--   /temp/ of the jump register would be dirty
+setJump :: Int
+        -- ^ which subprogram to jump into
+        -> CodeGen
+setJump n = do
+          stackFirst
+          raw "[-]" -- clear
+          incConstant n -- set
+
+-- | Do not invoke any functions or goto some where.
+--   The program will exit at the end.
+--   (Finally goto the /jump/ variable)
+clearJump :: CodeGen
+clearJump = setJump 0
+
 
 -- ** Variable operations: define , assign , modify , delete , move to
 
@@ -164,7 +180,6 @@ stackEnlarge n = do
               raw "+" -- clean stack top flag
               loop (unitElements) $ raw ">" -- move to the next Unit
               raw "[-]" -- set the stack top flag
-
 
 stackDrop :: Int
           -- ^ How many /Unit/s at the stack top will be droped (deleted)
@@ -208,22 +223,6 @@ amendVar _ v@(GlobalVar _) = v
 amendVar n (LocalVar x) = LocalVar (x+n)
 amendVar n (PointerVar p) = PointerVar (amendVar n p)
 amendVar n (ArrayVar b o) = ArrayVar (amendVar n b) (amendVar n o)
-
--- | finally goto the /jump/ variable
---   /temp/ of the jump register would be dirty
-setJump :: Int
-        -- ^ which subprogram to jump into
-        -> CodeGen
-setJump n = do
-          stackFirst
-          raw "[-]" -- clear
-          incConstant n -- set
-
--- | Do not invoke any functions or goto some where.
---   The program will exit at the end.
---   (Finally goto the /jump/ variable)
-clearJump :: CodeGen
-clearJump = setJump 0
 
 -- | decreasing the current variable
 dec :: CodeGen
@@ -278,10 +277,7 @@ unsafeAssign :: Variable
        -> Variable
        -- ^ b
        -> CodeGen
-unsafeAssign a b | a == b = return ()
-                 | otherwise = do
-                               clearVar a
-                               _assignAdd a b
+unsafeAssign a b = clearVar a >> _assignAdd a b
 
 -- | perform logical NOT to the current /Unit/.
 -- This operation does not allocate new variables on the stack,
@@ -313,32 +309,6 @@ safeAssign a b = do
                  stackDrop 1
 -- a@(GlobalVar _) b@(LocalVar _) this situation is not suit for global
 -- pointers. So it belongs the last case.
-
-
--- | @a = a && b@.
---  /unsafe !!/ @a@ and @b@ must be different variables
---  finally locates at @a@
---  /unsafe/
-_assignLogAND :: Variable
-             -- ^ Variable @a@
-             -> Variable
-             -- ^ Variable @b@
-             -> CodeGen
-_assignLogAND a b | a == b = gotoVar a
-_assignLogAND a b =
-        do
-          gotoVar a
-          raw ">>[-]<<" -- clear a's temp
-          raw "[[-]" -- if (a) then a := 0
-          gotoVar b
-          raw "[" -- if (b)
-          gotoVar a
-          raw ">>+<<" -- a's temp ++
-          raw "]" -- endif(b)
-          gotoVar a
-          raw "]" -- endif(a)
-          -- located at a
-          raw ">>[<<+>>-]<<" -- if (a's temp) then a++, temp-- ; else a = 0
 
 
 -- | perform logical AND on two variables,
@@ -561,6 +531,33 @@ _doLogNOT v = do
              raw "]" -- now: new var == 0
              stackLast -- goto the new Variable
              raw ">>[-<<+>>]<<" -- if (temp) then newVar := 1
+
+
+-- | @a = a && b@.
+--  /unsafe !!/ @a@ and @b@ must be different variables
+--  finally locates at @a@
+--  /unsafe/ , /obsolete!/
+_assignLogAND :: Variable
+             -- ^ Variable @a@
+             -> Variable
+             -- ^ Variable @b@
+             -> CodeGen
+_assignLogAND a b | a == b = gotoVar a
+_assignLogAND a b =
+        do
+          gotoVar a
+          raw ">>[-]<<" -- clear a's temp
+          raw "[[-]" -- if (a) then a := 0
+          gotoVar b
+          raw "[" -- if (b)
+          gotoVar a
+          raw ">>+<<" -- a's temp ++
+          raw "]" -- endif(b)
+          gotoVar a
+          raw "]" -- endif(a)
+          -- located at a
+          raw ">>[<<+>>-]<<" -- if (a's temp) then a++, temp-- ; else a = 0
+
 
 {------------------------------------------------------------------------------}
 -- * Translation
