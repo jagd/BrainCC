@@ -272,62 +272,6 @@ incConstant n | n > 0 = loop n $ raw "+"
               | otherwise = return ()
 
 
--- | the low-level assign: @ a = f(b) @
---   finally goto the variable @b@
---   /unsafe/
-_assign :: CodeGen
-        -- ^ the mapping f
-        -> Variable
-        -- ^ a
-        -> Variable
-        -- ^ b
-        -> CodeGen
-_assign op a b
-        | (a == b) = do
-                gotoVar b
-                -- clear the temporary cell of var b & align
-                raw ">>[-]<<"
-                raw "[->>+<<]" -- copy from b to b's temp
-                raw ">>" -- goto b's temp
-                raw "[-<<" -- dec(b's temp) then return to b
-                raw "+" -- recover b's original value
-                op
-                raw ">>]" -- goto b's temp
-                raw "<<" -- align
-        | otherwise = do
-                gotoVar b
-                -- clear the temporary cell of var b & align
-                raw ">>[-]<<"
-                raw "[" -- copy loop
-                raw "->>+<<" -- copy to var b's temp
-                gotoVar a
-                op -- modify the var a with op
-                gotoVar b
-                raw "]"
-                gotoVar b -- to recover b's original value
-                raw ">>[-<<+>>]<<"
-
--- | equivalent as in C: @ a += b @.
---   finally goto the variable @b@.
---   /unsafe/
-_assignAdd :: Variable
-          -- ^ a
-          -> Variable
-          -- ^ b
-          -> CodeGen
-_assignAdd = _assign (raw "+")
-
--- | equivalent as in C: @ a -= b @.
---   finally goto the variable @b@.
---   /unsafe/
-_assignMinus :: Variable
-          -- ^ a
-          -> Variable
-          -- ^ b
-          -> CodeGen
-_assignMinus = _assign (raw "-")
-
-
 -- | @a = b@, please ensure, that a != b
 unsafeAssign :: Variable
        -- ^ a
@@ -338,6 +282,17 @@ unsafeAssign a b | a == b = return ()
                  | otherwise = do
                                clearVar a
                                _assignAdd a b
+
+-- | perform logical NOT to the current /Unit/.
+-- This operation does not allocate new variables on the stack,
+-- but uses temp variables
+curLogNOT :: CodeGen
+curLogNOT = do
+            raw ">>[-]-<<" -- temp := -1
+            raw "[>>+<<[-]]" -- if (curr) then temp := 0 else temp keep -1
+            -- if (temp) ~~~~ if (!curr.old) then curr = 1 else keep 0
+            raw ">>[<<+>>+]<<"
+
 
 -- | @a = b@
 safeAssign :: Variable
@@ -414,6 +369,121 @@ doLogOR r a b = do
                 unsafeAssign (amendVar 1 r) (LocalVar 0)
                 stackDrop 1
 
+--   @result = a + b@, it is /safe/
+doPlus :: Variable
+       -- ^ @result@
+       -> Variable
+       -- ^ @a@
+       -> Variable
+       -- ^ @b@
+       -> CodeGen
+doPlus r a b = do
+               _doPlus a b
+               unsafeAssign (amendVar 1 r) (LocalVar 0)
+               stackDrop 1
+
+--   @result = a + b@, it is /safe/
+doMinus :: Variable
+        -- ^ @result@
+        -> Variable
+        -- ^ @a@
+        -> Variable
+        -- ^ @b@
+        -> CodeGen
+doMinus r a b = do
+                _doMinus a b
+                unsafeAssign (amendVar 1 r) (LocalVar 0)
+                stackDrop 1
+
+-- | the low-level assign: @ a = f(b) @
+--   finally goto the variable @b@
+--   /unsafe/
+_assign :: CodeGen
+        -- ^ the mapping f
+        -> Variable
+        -- ^ a
+        -> Variable
+        -- ^ b
+        -> CodeGen
+_assign op a b
+        | (a == b) = do  -- this case does not inclusive Array and Pointer !
+                gotoVar b
+                -- clear the temporary cell of var b & align
+                raw ">>[-]<<"
+                raw "[->>+<<]" -- copy from b to b's temp
+                raw ">>" -- goto b's temp
+                raw "[-<<" -- dec(b's temp) then return to b
+                raw "+" -- recover b's original value
+                op
+                raw ">>]" -- goto b's temp
+                raw "<<" -- align
+        | otherwise = do
+                gotoVar b
+                -- clear the temporary cell of var b & align
+                raw ">>[-]<<"
+                raw "[" -- copy loop
+                raw "->>+<<" -- copy to var b's temp
+                gotoVar a
+                op -- modify the var a with op
+                gotoVar b
+                raw "]"
+                gotoVar b -- to recover b's original value
+                raw ">>[-<<+>>]<<"
+
+-- | equivalent as in C: @ a += b @.
+--   finally goto the variable @b@.
+--   /unsafe/
+_assignAdd :: Variable
+          -- ^ a
+          -> Variable
+          -- ^ b
+          -> CodeGen
+_assignAdd = _assign (raw "+")
+
+-- | equivalent as in C: @ a -= b @.
+--   finally goto the variable @b@.
+--   /unsafe/
+_assignMinus :: Variable
+          -- ^ a
+          -> Variable
+          -- ^ b
+          -> CodeGen
+_assignMinus = _assign (raw "-")
+
+
+-- | calculate the sum of two variables,
+--   @a + b@
+--   the result will be a new variable at the stack top.
+--   /unsafe/
+_doPlus :: Variable
+        -- ^ @a@
+        -> Variable
+        -- ^ @b@
+        -> CodeGen
+_doPlus a b = do
+              newVar 0
+              let a' = amendVar 1 a
+                  b' = amendVar 1 b
+                  res = LocalVar 0
+              _assignAdd res a
+              _assignAdd res b
+
+-- | calculate the difference of two variables,
+--   @a - b@
+--   the result will be a new variable at the stack top.
+--   /unsafe/
+_doMinus :: Variable
+         -- ^ @a@
+         -> Variable
+         -- ^ @b@
+         -> CodeGen
+_doMinus a b = do
+               newVar 0
+               let a' = amendVar 1 a
+                   b' = amendVar 1 b
+                   res = LocalVar 0
+               _assignAdd res a
+               _assignMinus res b
 
 -- | perform logical AND on two variables,
 --   the result will be a new variable at the stack top.
@@ -475,16 +545,6 @@ _doLogOR a b =
           raw "]"
           gotoVar res -- until now, res == 0
           raw ">>[[-]<<+>>]<<"
-
--- | perform logical NOT to the current /Unit/.
--- This operation does not allocate new variables on the stack,
--- but uses temp variables
-curLogNOT :: CodeGen
-curLogNOT = do
-            raw ">>[-]-<<" -- temp := -1
-            raw "[>>+<<[-]]" -- if (curr) then temp := 0 else temp keep -1
-            -- if (temp) ~~~~ if (!curr.old) then curr = 1 else keep 0
-            raw ">>[<<+>>+]<<"
 
 -- | perform logical OR on variable,
 --   the result will be a new variable at the stack top.
