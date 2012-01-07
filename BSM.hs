@@ -35,6 +35,9 @@ After the second /Unit/ follows the user stack.
 At the end of each operations, the memory pointer will be aligned at the first
 element of a /Memory Unit/.
 
+The flag /unsafe/  means this operation can not be used at the same variables.
+Those /unsafe/ functions have prefix \"unsafe\" or a underline \"_\"
+
 -}
 
 module BSM where
@@ -51,16 +54,22 @@ loop n m = m >> loop (n-1) m
 -- | Number of Cells in each /Memory Unit/ (as a constant)
 unitElements = 3
 
-
 -- | GlobalVar will be only used for global variables,
 --   do not mix it with LocalVar, or the assign will not work rightly.
+--   To the Order : ArrayVar is the most expensive and so is PointerVar
 data Variable = LocalVar { localOffset :: Int }
+              -- ^ counted backwards from the stack top
               | GlobalVar { globalOffset :: Int }
+              -- ^ forwards from stack bottom
+              | PointerVar Variable
+              -- ^ based on the GlobalVar 0
               | ArrayVar {
                         arrayBase   :: Variable,
                         arrayOffset :: Variable
                 }
+              -- ^ Based on a arbitrary Variable
               deriving (Eq, Ord)
+
 
 
 {------------------------------------------------------------------------------}
@@ -123,7 +132,9 @@ raw = tell
 
 -- ** Variable operations: define , assign , modify , delete , move to
 
--- | allocate a new variable at the top of the stack and move the current Unit to it
+-- | allocate a new variable at the top of the stack
+--   and move the current Unit to it.
+--   /temp/ would be dirty
 newVar :: Int
        -- ^ the value of this variable
        -> CodeGen
@@ -182,6 +193,8 @@ gotoVar (GlobalVar n) = do
         stackFirst
         loop (n * unitElements) $ raw ">"
 
+gotoVar _ = undefined
+
 
 
 -- | fix a old variable due to extra offset from the new allocated variables
@@ -193,8 +206,11 @@ amendVar :: Int
          -- ^ the result variable
 amendVar _ v@(GlobalVar _) = v
 amendVar n (LocalVar x) = LocalVar (x+n)
+amendVar n (PointerVar p) = PointerVar (amendVar n p)
+amendVar n (ArrayVar b o) = ArrayVar (amendVar n b) (amendVar n o)
 
 -- | finally goto the /jump/ variable
+--   /temp/ of the jump register would be dirty
 setJump :: Int
         -- ^ which subprogram to jump into
         -> CodeGen
@@ -231,16 +247,14 @@ clearVar :: Variable
          -> CodeGen
 clearVar v = do
              gotoVar v
-             clearCurr
+             raw "[-]"
 
--- | clear the current /Cell/
-clearCurr :: CodeGen
-clearCurr = raw "[-]"
-
+-- | /temp/ would be dirty
 setCurVar :: Int -> CodeGen
 setCurVar n = raw "[-]" >> incConstant n
 
 -- | @v = c@ @c@ is a constant
+-- /temp/ would be dirty
 setVar :: Variable
        -- ^ the variable @v@
        -> Int
@@ -248,7 +262,8 @@ setVar :: Variable
        -> CodeGen
 setVar v n = gotoVar v >> setCurVar n
 
--- | add a constant to che current /Cell/
+-- | add a constant to che current /Unit/,
+--   which would make the temp of this Unit dirty
 incConstant :: Int
             -- ^ the constant Integer to be added
             -> CodeGen
@@ -266,7 +281,7 @@ unsafeAssign :: Variable
 unsafeAssign a b | a == b = return ()
                  | otherwise = do
                                clearVar a
-                               assignAdd a b
+                               _assignAdd a b
 
 -- | @a = b@
 safeAssign :: Variable
@@ -281,44 +296,44 @@ safeAssign a b = do
                  newVar 0
                  let a' = amendVar 1 a
                      b' = amendVar 1 b
-                 assignAdd (LocalVar 0) b'
+                 _assignAdd (LocalVar 0) b'
                  clearVar a
-                 assignAdd b (LocalVar 0)
+                 _assignAdd b (LocalVar 0)
                  stackDrop 1
 -- a@(GlobalVar _) b@(LocalVar _) this situation is not suit for global
 -- pointers. So it belongs the last case.
 
 -- | equivalent as in C: @ a += b @.
---   finally goto the variable @b@
--- FIXME: unsafe
-assignAdd :: Variable
+--   finally goto the variable @b@.
+--   /unsafe/
+_assignAdd :: Variable
           -- ^ a
           -> Variable
           -- ^ b
           -> CodeGen
-assignAdd = _assign (raw "+")
+_assignAdd = _assign (raw "+")
 
 -- | equivalent as in C: @ a -= b @.
---   finally goto the variable @b@
--- FIXME: unsafe
-assignMinus :: Variable
+--   finally goto the variable @b@.
+--   /unsafe/
+_assignMinus :: Variable
           -- ^ a
           -> Variable
           -- ^ b
           -> CodeGen
-assignMinus = _assign (raw "-")
+_assignMinus = _assign (raw "-")
 
 -- | @a = a && b@.
---  /unsafe !!/ &a != &b
+--  /unsafe !!/ @a@ and @b@ must be different variables
 --  finally locates at @a@
--- FIXME: unsafe
-assignLogAND :: Variable
+--  /unsafe/
+_assignLogAND :: Variable
              -- ^ Variable @a@
              -> Variable
              -- ^ Variable @b@
              -> CodeGen
-assignLogAND a b | a == b = gotoVar a
-assignLogAND a b =
+_assignLogAND a b | a == b = gotoVar a
+_assignLogAND a b =
         do
           gotoVar a
           raw ">>[-]<<" -- clear a's temp
@@ -336,7 +351,7 @@ assignLogAND a b =
 
 -- | the low-level assign: @ a = f(b) @
 --   finally goto the variable @b@
--- FIXME: unsafe
+--   /unsafe/
 _assign :: CodeGen
         -- ^ the mapping f
         -> Variable
@@ -371,11 +386,10 @@ _assign op a b
 
 -- | perform logical AND on two variables,
 --   the result will be a new variable at the stack top.
---   Finally located at the stack top /Unit/ (the result)
--- FIXME: unsafe
--- FIXME: rewrite for tri-argument
-doLogAND :: Variable -> Variable -> CodeGen
-doLogAND a b =
+--   Finally located at the stack top /Unit/ (the result).
+--   /unsafe/
+_doLogAND :: Variable -> Variable -> CodeGen
+_doLogAND a b =
         do
           newVar 0
           raw ">>[-]<<" -- res's temp = 0
@@ -384,23 +398,32 @@ doLogAND a b =
               b' = amendVar 1 b
               far = max a' b' -- optimization
               near = min a' b'
-          assignAdd res far
+          gotoVar near
+          raw "[" -- if (near)
           gotoVar res
-          raw "[" -- if (res) , equivalent to if (far)
-          raw "[-]" -- res := 0
-          assignAdd res near
+          raw ">>+<<" -- res's temp++
+          raw "]"
+          gotoVar near
+          raw "[" -- if (near)
+          gotoVar far
+          raw "[" -- if (far)
           gotoVar res
-          raw "[->>+<<][-]" -- copy res to res'tmp, then res := 0
-          raw "]" -- endif (res) , equivalent to endif (far)
-          raw ">>[-<<+>>]<<" -- copy res's tmp to res
+          raw ">>+<<" -- res's temp++
+          raw "]"
+          raw "]"
+          gotoVar res
+          raw "+>>--" -- res := 1 , res's temp -= 2
+          raw "[[+]<<->>]" -- if (res's temp) then temp := 0 , res := 0
+          raw "<<" -- align
+
 
 -- | perform logical OR on two variables,
 --   the result will be a new variable at the stack top.
 --   Finally located at the stack top /Unit/ (the result)
 -- FIXME: unsafe
--- FIXME: rewrite for tri-argument
-doLogOR :: Variable -> Variable -> CodeGen
-doLogOR a b =
+-- FIXME: rewrite
+_doLogOR :: Variable -> Variable -> CodeGen
+_doLogOR a b =
         do
           newVar 0
           raw ">>[-]<<" -- res's temp := 0
@@ -436,13 +459,18 @@ curLogNOT = do
 -- | perform logical OR on variable,
 --   the result will be a new variable at the stack top.
 --   Finally located at the stack top /Unit/ (the result)
-doLogNOT :: Variable -> CodeGen
-doLogNOT v = do
+_doLogNOT :: Variable -> CodeGen
+_doLogNOT v = do
              newVar 0
+             raw ">>[-]+<<" -- new var's temp := 1
              let v' = amendVar 1 v
-             assignAdd (LocalVar 0) v'
-             stackLast
-             curLogNOT
+             gotoVar v'
+             raw "[" -- if (v')
+             stackLast -- goto the new Variable
+             raw ">>-<<" -- new var's temp := 0
+             raw "]" -- now: new var == 0
+             stackLast -- goto the new Variable
+             raw ">>[-<<+>>]<<" -- if (temp) then newVar := 1
 
 {------------------------------------------------------------------------------}
 -- * Translation
