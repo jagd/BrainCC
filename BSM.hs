@@ -18,12 +18,11 @@ The structure of a /Memory Unit/:
 | 1             stack top/bottom flag (see later)  |
 |               top (rightmost) will be set to 0   |
 |               bottom (leftmost) is -1,           |
-|               otherwise                          |
-|               a small positive number:           |
-|               in this case, it would be used as  |
-|               a flag for relative addressing.    |
+|               otherwise a small positive number. |
 |                                                  |
 | 2             temporary variable                 |
+|                                                  |
+| 3             counter for relative addressing    |
 +--------------------------------------------------+
 @
 
@@ -52,7 +51,7 @@ loop 0 _ = return ()
 loop n m = m >> loop (n-1) m
 
 -- | Number of Cells in each /Memory Unit/ (as a constant)
-unitElements = 3
+unitElements = 4
 
 -- | GlobalVar will be only used for global variables,
 --   do not mix it with LocalVar, or the assign will not work rightly.
@@ -61,13 +60,24 @@ data Variable = LocalVar { localOffset :: Int }
               -- ^ counted backwards from the stack top
               | GlobalVar { globalOffset :: Int }
               -- ^ forwards from stack bottom
-              | PointerVar Variable
-              -- ^ based on the GlobalVar 0
               | ArrayVar {
+                        -- | This variable is the base variable.
+                        --   The addressing process do not care what value it has.
                         arrayBase   :: Variable,
+                        -- | the /runtime value/ of this variable
+                        --   will be treated as offset
                         arrayOffset :: Variable
                 }
-              -- ^ Based on a arbitrary Variable
+              -- ^ Based on a arbitrary Variable,
+              --   grows from left to right (forwards).
+              --
+              --   Array will be indexed with a variable,
+              --   or it is a  LocalVar \/ GlobalVar with constant (negative)
+              --   offset.
+              --
+              --   Pointers are also Arrays, usually they will be some
+              --   offset address, starting from a GlobalVar, the base Variable
+              --   can be e.g. (GlobalVar 0).
               deriving (Eq, Ord)
 
 
@@ -193,26 +203,79 @@ stackDrop n = do
               raw "[-]<" -- set the top flag & align
 
 
--- | goto the n\'st variable, forwards or backwards,
---   global variable \'n\' = 0 means the jump register
---   local variable \'n\' = 0 means the stack top /Unit/.
---   For the ArrayVar: inorder to handle a variable like "x[x[i]]",
---   the inner x[i] will be aissigned to a temporary /Unit/ (not a temperory
---   /Cell/) on the stack top. So it could be very expensive
--- FIXME: ArrayVar and when ArrayVar == LocalVar
+-- | Goto the n\'st variable, forwards or backwards:
+--
+--   * Global variable \'n\' = 0 means the jump register
+--
+--   * Local variable \'n\' = 0 means the stack top /Unit/
+--
+--   It could be very expensive to adress a ArrayVar
 gotoVar :: Variable -> CodeGen
+
 gotoVar (LocalVar n) = do
         stackLast
         loop (n * unitElements) $ raw "<"
+
 gotoVar (GlobalVar n) = do
         stackFirst
         loop (n * unitElements) $ raw ">"
 
-gotoVar _ = undefined
+gotoVar (ArrayVar (ArrayVar bbase boffset) offset) = do
+        newVar 0
+        _assignAdd (LocalVar 0) (amendVar 1 boffset)
+        _gotoArrayVar bbase offset
+
+-- The pattern:
+--     gotoVar (ArrayVar base (ArrayVar _ _))
+-- is in the commen pattern inclusived
+
+gotoVar (ArrayVar base offset) = do -- otherwise
+        newVar 0
+        _gotoArrayVar base offset
+
+-- the low-level implementation of gotoArrayVar or
+-- gotoVar with a ArrayVar argument.
+_gotoArrayVar base offset = do
+        -- newVar 0 -- clone of the offset, should be done at higher level
+        let offset' = amendVar 1 offset
+            base' = amendVar 1 base
+            cloneOffset = (LocalVar 0)
+        _assignAdd cloneOffset offset'
+        gotoVar base'
+        raw ">>>[-]<<<" -- clean base's counter
+        gotoVar cloneOffset
+        raw "[" -- add the cloneOffset to base's counter
+        raw "-" -- cloneOffset--
+        gotoVar base'
+        raw ">>>+<<<" -- base's counter++
+        gotoVar cloneOffset
+        raw "]"
+        stackDrop 1
+        -- cloneOffset deleted, this step must be done right now
+        gotoVar base -- the unfixed base
+        raw ">>>" -- move to its counter
+        -- whether it is the top of the stack will not be guaranteed
+        -- because Array (LocalVar 0) (0) is also legal
+        raw "["  -- if its counter > 0
+        -- the next's flag := 0
+        loop unitElements $ raw ">" -- move to next Unit's counter
+        raw "[-]" -- next's counter := 0
+        loop unitElements $ raw "<" -- move back
+        raw "[" -- carry the rest of counter to the next Unit
+        raw "-"
+        loop unitElements $ raw ">" -- move to next Unit
+        raw "+"
+        loop unitElements $ raw "<" -- move back
+        raw "]"
+        -- now located at the lefter Unit
+        loop unitElements $ raw ">" -- move to next Unit
+        raw "-" -- next's counter--
+        raw "]" -- the final position arrived
+        raw "<<<" -- align
 
 
-
--- | fix a old variable due to extra offset from the new allocated variables
+-- | to fix a old variable due to extra offset from the new allocated stack
+--   elements
 amendVar :: Int
          -- ^ how many new variables was allocated after the variable @a@
          -> Variable
@@ -221,7 +284,6 @@ amendVar :: Int
          -- ^ the result variable
 amendVar _ v@(GlobalVar _) = v
 amendVar n (LocalVar x) = LocalVar (x+n)
-amendVar n (PointerVar p) = PointerVar (amendVar n p)
 amendVar n (ArrayVar b o) = ArrayVar (amendVar n b) (amendVar n o)
 
 -- | decreasing the current variable
@@ -252,8 +314,9 @@ clearVar v = do
 setCurVar :: Int -> CodeGen
 setCurVar n = raw "[-]" >> incConstant n
 
--- | @v = c@ @c@ is a constant
--- /temp/ would be dirty
+-- | @v = c@
+--
+--   @c@ is a constant and its /temp cell/ would be dirty
 setVar :: Variable
        -- ^ the variable @v@
        -> Int
@@ -271,7 +334,9 @@ incConstant n | n > 0 = loop n $ raw "+"
               | otherwise = return ()
 
 
--- | @a = b@, please ensure, that a != b
+-- | assign @b@ to @a@
+--
+-- please ensure @a != b@
 unsafeAssign :: Variable
        -- ^ a
        -> Variable
@@ -279,7 +344,8 @@ unsafeAssign :: Variable
        -> CodeGen
 unsafeAssign a b = clearVar a >> _assignAdd a b
 
--- | perform logical NOT to the current /Unit/.
+-- | do logical NOT on the current /Unit/.
+--
 -- This operation does not allocate new variables on the stack,
 -- but uses temp variables
 curLogNOT :: CodeGen
@@ -311,8 +377,9 @@ safeAssign a b = do
 -- pointers. So it belongs the last case.
 
 
--- | perform logical AND on two variables,
---   @result = a && b@
+-- | @result = a && b@
+--
+-- it is /safe/, but expansive
 doLogAND :: Variable
          -- ^ @result@
          -> Variable
@@ -325,8 +392,9 @@ doLogAND r a b = do
                  unsafeAssign (amendVar 1 r) (LocalVar 0)
                  stackDrop 1
 
--- | perform logical OR on two variables,
---   @result = a || b@
+-- | @result = a || b@
+--
+-- it is /safe/, but expansive
 doLogOR :: Variable
         -- ^ @result@
         -> Variable
@@ -339,7 +407,9 @@ doLogOR r a b = do
                 unsafeAssign (amendVar 1 r) (LocalVar 0)
                 stackDrop 1
 
---   @result = a + b@, it is /safe/
+-- @result = a + b@
+--
+-- it is /safe/, but expansive
 doPlus :: Variable
        -- ^ @result@
        -> Variable
@@ -352,7 +422,9 @@ doPlus r a b = do
                unsafeAssign (amendVar 1 r) (LocalVar 0)
                stackDrop 1
 
---   @result = a + b@, it is /safe/
+-- @result = a + b@
+--
+-- it is /safe/, but expansive
 doMinus :: Variable
         -- ^ @result@
         -> Variable
@@ -366,7 +438,9 @@ doMinus r a b = do
                 stackDrop 1
 
 -- | the low-level assign: @ a = f(b) @
+--
 --   finally goto the variable @b@
+--
 --   /unsafe/
 _assign :: CodeGen
         -- ^ the mapping f
@@ -400,8 +474,10 @@ _assign op a b
                 gotoVar b -- to recover b's original value
                 raw ">>[-<<+>>]<<"
 
--- | equivalent as in C: @ a += b @.
+-- | @ a += b @
+--
 --   finally goto the variable @b@.
+--
 --   /unsafe/
 _assignAdd :: Variable
           -- ^ a
@@ -410,8 +486,10 @@ _assignAdd :: Variable
           -> CodeGen
 _assignAdd = _assign (raw "+")
 
--- | equivalent as in C: @ a -= b @.
+-- | @ a -= b @
+--
 --   finally goto the variable @b@.
+--
 --   /unsafe/
 _assignMinus :: Variable
           -- ^ a
@@ -422,8 +500,11 @@ _assignMinus = _assign (raw "-")
 
 
 -- | calculate the sum of two variables,
+--
 --   @a + b@
+--
 --   the result will be a new variable at the stack top.
+--
 --   /unsafe/
 _doPlus :: Variable
         -- ^ @a@
@@ -439,8 +520,11 @@ _doPlus a b = do
               _assignAdd res b
 
 -- | calculate the difference of two variables,
+--
 --   @a - b@
+--
 --   the result will be a new variable at the stack top.
+--
 --   /unsafe/
 _doMinus :: Variable
          -- ^ @a@
@@ -455,9 +539,12 @@ _doMinus a b = do
                _assignAdd res a
                _assignMinus res b
 
--- | perform logical AND on two variables,
+-- | logical AND on two variables,
+--
 --   the result will be a new variable at the stack top.
+--
 --   Finally located at the stack top /Unit/ (the result).
+--
 --   /unsafe/
 _doLogAND :: Variable -> Variable -> CodeGen
 _doLogAND a b =
@@ -488,8 +575,10 @@ _doLogAND a b =
           raw "<<" -- align
 
 
--- | perform logical OR on two variables,
+-- | logical OR on two variables,
+--
 --   the result will be a new variable at the stack top.
+--
 --   Finally located at the stack top /Unit/ (the result).
 --   /unsafe/
 _doLogOR :: Variable -> Variable -> CodeGen
@@ -516,8 +605,10 @@ _doLogOR a b =
           gotoVar res -- until now, res == 0
           raw ">>[[-]<<+>>]<<"
 
--- | perform logical OR on variable,
+-- | logical NOT on any variable,
+--
 --   the result will be a new variable at the stack top.
+--
 --   Finally located at the stack top /Unit/ (the result)
 _doLogNOT :: Variable -> CodeGen
 _doLogNOT v = do
@@ -534,8 +625,9 @@ _doLogNOT v = do
 
 
 -- | @a = a && b@.
---  /unsafe !!/ @a@ and @b@ must be different variables
+--
 --  finally locates at @a@
+--
 --  /unsafe/ , /obsolete!/
 _assignLogAND :: Variable
              -- ^ Variable @a@
