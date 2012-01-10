@@ -119,7 +119,7 @@ stackFirst :: CodeGen
 stackFirst = do
              raw ">+[-" -- move to the flag cell, and look whether it was -1
              -- move left with the length of a Memory Unit
-             loop unitElements $ raw "<"
+             unitLeft
              raw "+]-" -- untill the -1 mark, reset it to -1
              -- skip the reserved Unit with align
              loop (unitElements - 1) $ raw ">"
@@ -129,7 +129,7 @@ stackLast :: CodeGen
 stackLast = do
              raw ">[" -- move to the flag cell
              -- move right with the length of a Memory Unit
-             loop unitElements $ raw ">"
+             unitRight
              raw "]<" -- align
 
 
@@ -188,7 +188,7 @@ stackEnlarge n = do
         raw "<" -- align
     where f = do
               raw "+" -- clean stack top flag
-              loop (unitElements) $ raw ">" -- move to the next Unit
+              unitRight -- move to the next Unit
               raw "[-]" -- set the stack top flag
 
 stackDrop :: Int
@@ -201,6 +201,15 @@ stackDrop n = do
               raw ">" -- move to the stack flag cell
               loop (n * unitElements) $ raw "<"
               raw "[-]<" -- set the top flag & align
+
+-- | move one Unit length towards right
+unitRight :: CodeGen
+unitRight = loop unitElements $ raw ">"
+
+
+-- | move one Unit length towards left
+unitLeft :: CodeGen
+unitLeft = loop unitElements $ raw "<"
 
 
 -- | Goto the n\'st variable, forwards or backwards:
@@ -259,17 +268,17 @@ _gotoArrayVar base offset = do
         -- because Array (LocalVar 0) (0) is also legal
         raw "["  -- if its counter > 0
         -- the next's flag := 0
-        loop unitElements $ raw ">" -- move to next Unit's counter
+        unitRight -- move to next Unit's counter
         raw "[-]" -- next's counter := 0
-        loop unitElements $ raw "<" -- move back
+        unitLeft -- move back
         raw "[" -- carry the rest of counter to the next Unit
         raw "-"
-        loop unitElements $ raw ">" -- move to next Unit
+        unitRight -- move to next Unit
         raw "+"
-        loop unitElements $ raw "<" -- move back
+        unitLeft -- move back
         raw "]"
         -- now located at the lefter Unit
-        loop unitElements $ raw ">" -- move to next Unit
+        unitRight -- move to next Unit
         raw "-" -- next's counter--
         raw "]" -- the final position arrived
         raw "<<<" -- align
@@ -493,16 +502,16 @@ __doEQ isNE a b = do
             gotoVar res
             raw "["
             dec
-            loop unitElements $ raw ">" -- next Unit
+            unitRight -- next Unit
             dec
-            loop unitElements $ raw "<" -- prev Unit
+            unitLeft -- prev Unit
             raw "]"
             when (not isNE) inc -- res := 1
-            loop unitElements $ raw ">" -- next Unit
+            unitRight -- next Unit
             raw "["
-            loop unitElements $ raw "<" -- prev Unit
+            unitLeft -- prev Unit
             if isNE then inc else dec
-            loop unitElements $ raw ">" -- next Unit
+            unitRight -- next Unit
             raw "[-]]"
             stackDrop 1
 
