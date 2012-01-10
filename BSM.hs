@@ -46,8 +46,9 @@ import Data.List (foldl')
 
 type CodeGen = Writer String ()
 
-loop :: (Num t, Monad m) => t -> m a -> m ()
+loop :: (Ord t, Num t, Monad m) => t -> m a -> m ()
 loop 0 _ = return ()
+loop n _ | n < 0 = error "negative (infinity) loop"
 loop n m = m >> loop (n-1) m
 
 -- | Number of Cells in each /Memory Unit/ (as a constant)
@@ -340,7 +341,7 @@ incConstant :: Int
             -- ^ the constant Integer to be added
             -> CodeGen
 incConstant n | n > 0 = loop n $ raw "+"
-              | n < 0 = incConstant (-n)
+              | n < 0 = loop (-n) $ raw "-"
               | otherwise = return ()
 
 
