@@ -1,7 +1,7 @@
 {- |
 
-a dirty and simple Brainf**k interpreter,
-which was written many years ago
+A plain and dirty Brainf**k interpreter, which was written many years ago.
+For QuickCheck and Debug.
 
 -}
 
@@ -11,11 +11,11 @@ import Data.Word
 import Data.Char (chr, ord)
 
 data BFState = BFState {
-     -- | the Code State
+     -- the Code State
      opCurr   :: Maybe Char,
      opRight  :: [Char],
      opLeft   :: [Char],
-     -- | the memory state :
+     -- the memory state :
      memCurr  :: Word8,
      memRight :: [Word8],
      memLeft  :: [Word8]
