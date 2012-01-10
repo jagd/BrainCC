@@ -1,4 +1,5 @@
-module TestBSM where
+-- module TestBSM where
+module Main where
 
 import Test.QuickCheck
 
