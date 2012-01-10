@@ -335,14 +335,21 @@ setVar :: Variable
        -> CodeGen
 setVar v n = gotoVar v >> setCurVar n
 
--- | add a constant to che current /Unit/,
---   which would make the temp of this Unit dirty
+-- | do constant numbers of \"+\" to the current /Unit/,
 incConstant :: Int
             -- ^ the constant Integer to be added
             -> CodeGen
 incConstant n | n > 0 = loop n $ raw "+"
               | n < 0 = loop (-n) $ raw "-"
               | otherwise = return ()
+
+-- | Push a constant @n@ at the top of the stack.
+--   This process would use several new temp variables
+--   and make the temp of this Unit dirty
+pushConstant :: Int
+             -- ^ constant @n@
+             -> CodeGen
+pushConstant = undefined
 
 
 -- | assign @b@ to @a@
@@ -475,7 +482,8 @@ doNE r a b = do
              stackDrop 1
 
 
--- | @a == b@ , result will be stored on a new Unit at the stack top
+-- | evaluate the express @a == b@ ,
+--   result will be stored on a new Unit at the stack top.
 _doEQ :: Variable
       -- @a@
       -> Variable
@@ -483,7 +491,8 @@ _doEQ :: Variable
       -> CodeGen
 _doEQ = __doEQ False
 
--- | @a != b@ , result will be stored on a new Unit at the stack top
+-- | evaluate the express @a != b@ ,
+--   result will be stored on a new Unit at the stack top.
 _doNE :: Variable
       -- @a@
       -> Variable
@@ -515,6 +524,29 @@ __doEQ isNE a b = do
             unitRight -- next Unit
             raw "[-]]"
             stackDrop 1
+
+
+-- | evaluate the express @a == c@ ,
+--   result will be stored on a new Unit at the stack top.
+--   @c@ is a constant!
+_doEQC :: Variable
+      -- @a@
+      -> Variable
+      -- @c@
+      -> CodeGen
+_doEQC a c = undefined
+
+
+-- | evaluate the express @a != c@ ,
+--   result will be stored on a new Unit at the stack top.
+--   @c@ is a constant!
+_doNEC :: Variable
+      -- @a@
+      -> Variable
+      -- @c@
+      -> CodeGen
+_doNEC a c = undefined
+
 
 -- | the low-level assign: @ a = f(b) @
 --
