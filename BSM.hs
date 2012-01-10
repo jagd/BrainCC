@@ -235,6 +235,7 @@ gotoVar (ArrayVar base offset) = do -- otherwise
 
 -- the low-level implementation of gotoArrayVar or
 -- gotoVar with a ArrayVar argument.
+-- only makes the Indexing Cell dirty
 _gotoArrayVar base offset = do
         -- newVar 0 -- clone of the offset, should be done at higher level
         let offset' = amendVar 1 offset
@@ -436,6 +437,74 @@ doMinus r a b = do
                 _doMinus a b
                 unsafeAssign (amendVar 1 r) (LocalVar 0)
                 stackDrop 1
+
+-- | @r = (a == b)@
+doEQ :: Variable
+     -- ^ @r@
+     -> Variable
+     -- ^ @a@
+     -> Variable
+     -- ^ @b@
+     -> CodeGen
+doEQ r a b = do
+             _doEQ a b
+             unsafeAssign (amendVar 1 r) (LocalVar 0)
+             stackDrop 1
+
+-- | @r = (a != b)@
+doNE :: Variable
+     -- ^ @r@
+     -> Variable
+     -- ^ @a@
+     -> Variable
+     -- ^ @b@
+     -> CodeGen
+doNE r a b = do
+             _doNE a b
+             unsafeAssign (amendVar 1 r) (LocalVar 0)
+             stackDrop 1
+
+
+-- | @a == b@ , result will be stored on a new Unit at the stack top
+_doEQ :: Variable
+      -- @a@
+      -> Variable
+      -- @b@
+      -> CodeGen
+_doEQ = __doEQ False
+
+-- | @a != b@ , result will be stored on a new Unit at the stack top
+_doNE :: Variable
+      -- @a@
+      -> Variable
+      -- @b@
+      -> CodeGen
+_doNE = __doEQ True
+
+__doEQ isNE a b = do
+            newVar 0
+            newVar 0
+            let res = (LocalVar 1)
+                tmp = (LocalVar 0)
+                a' = amendVar 2 a
+                b' = amendVar 2 b
+            _assignAdd  res a'
+            _assignAdd  tmp b'
+            gotoVar res
+            raw "["
+            dec
+            loop unitElements $ raw ">" -- next Unit
+            dec
+            loop unitElements $ raw "<" -- prev Unit
+            raw "]"
+            when (not isNE) inc -- res := 1
+            loop unitElements $ raw ">" -- next Unit
+            raw "["
+            loop unitElements $ raw "<" -- prev Unit
+            if isNE then inc else dec
+            loop unitElements $ raw ">" -- next Unit
+            raw "[-]]"
+            stackDrop 1
 
 -- | the low-level assign: @ a = f(b) @
 --
