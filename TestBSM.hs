@@ -355,6 +355,30 @@ testDoLogNOT x = genCode $
           raw "[-]]"
           end
 
+testDoPlus a b = genCode $
+        do
+          begin ( return () )
+          clearJump
+          newVar 0
+          newVar a
+          newVar b
+          doPlus (LocalVar 2) (LocalVar 0) (LocalVar 1)
+          gotoVar (LocalVar 2)
+          raw "."
+          end
+
+testDoMinus a b = genCode $
+        do
+          begin ( return () )
+          clearJump
+          newVar 0
+          newVar a
+          newVar b
+          doMinus (LocalVar 2) (LocalVar 1) (LocalVar 0)
+          gotoVar (LocalVar 2)
+          raw "."
+          end
+
 runTest = do
           putStrLn "testFrame1:"
           quickCheck $ "" == runBF testFrame1 ""
@@ -415,7 +439,7 @@ runTest = do
                                    then "Y\n"
                                    else ""
 
-          putStrLn "testEQ:"
+          putStrLn "doEQ:"
           quickCheck $ \(i, j) ->
                        let x = i `rem` 128
                            y = j `rem` 128
@@ -424,7 +448,7 @@ runTest = do
                              then "Y\n"
                              else ""
 
-          putStrLn "testNE:"
+          putStrLn "doNE:"
           quickCheck $ \(i, j) ->
                        let x = i `rem` 128
                            y = j `rem` 128
@@ -432,5 +456,19 @@ runTest = do
                            if x /= y
                              then "Y\n"
                              else ""
+
+          putStrLn "doPlus:"
+          quickCheck $ \(i, j) ->
+                       let x = i `rem` 127
+                           y = j `rem` 127
+                       in  runBF (testDoPlus x y) ""
+                             == [(toEnum ((x + y + 256) `rem` 256) :: Char)]
+
+          putStrLn "doMinus:"
+          quickCheck $ \(i, j) ->
+                       let x = i `rem` 127
+                           y = j `rem` 127
+                       in  runBF (testDoMinus x y) ""
+                             == [(toEnum ((x - y + 256) `rem` 256) :: Char)]
 
 main = runTest

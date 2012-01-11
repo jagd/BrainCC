@@ -581,12 +581,10 @@ _doPlus :: Variable
         -- ^ @b@
         -> CodeGen
 _doPlus a b = do
-              newVar 0
-              let a' = amendVar 1 a
-                  b' = amendVar 1 b
+              dupVar a
+              let b' = amendVar 1 b
                   res = LocalVar 0
-              _assignAdd res a
-              _assignAdd res b
+              _assignAdd res b'
 
 
 -- @result = a + b@
@@ -615,12 +613,10 @@ _doMinus :: Variable
          -- ^ @b@
          -> CodeGen
 _doMinus a b = do
-               newVar 0
-               let a' = amendVar 1 a
-                   b' = amendVar 1 b
+               dupVar a
+               let b' = amendVar 1 b
                    res = LocalVar 0
-               _assignAdd res a
-               _assignMinus res b
+               _assignMinus res b'
 
 
 -- | @r = (a == b)@
@@ -676,8 +672,8 @@ __doEQ isNE a b = do
                 tmp = (LocalVar 0)
                 a' = amendVar 2 a
                 b' = amendVar 2 b
-            _assignAdd  res a'
-            _assignAdd  tmp b'
+            _assignAdd res a'
+            _assignAdd tmp b'
             gotoVar res
             raw "["
             dec
@@ -722,8 +718,8 @@ _assign op a b
                 gotoVar b
                 -- clear the temporary cell of var b & align
                 raw ">>[-]<<"
-                raw "[" -- copy loop
-                raw "->>+<<" -- copy to var b's temp
+                raw "[" -- copy loop : while (b != 0)
+                raw "->>+<<" -- copy to b's temp
                 gotoVar a
                 op -- modify the var a with op
                 gotoVar b
