@@ -199,6 +199,15 @@ pushChar :: Char
     -> CodeGen
 pushChar = newVar . fromEnum
 
+
+-- | Push a copy of the Variable @x@ onto the stack top.
+dupVar :: Variable
+       -- ^ x
+       -> CodeGen
+dupVar x = do
+           newVar 0
+           _assignAdd (LocalVar 0) (amendVar 1 x)
+
 stackEnlarge :: Int
              -- ^ Number of addition /Unit/s
              -> CodeGen
@@ -251,8 +260,9 @@ gotoVar (GlobalVar n) = do
         loop (n * unitElements) $ raw ">"
 
 gotoVar (ArrayVar (ArrayVar bbase boffset) offset) = do
-        newVar 0
-        _assignAdd (LocalVar 0) (amendVar 1 boffset)
+        dupVar boffset
+        -- init the sum with boffset
+        -- the later offset will be add on it
         _gotoArrayVar bbase offset
 
 -- The pattern:
@@ -387,12 +397,10 @@ safeAssign a@(GlobalVar _) b@(GlobalVar _) =  unsafeAssign a b
 -- a@(GlobalVar _) b@(LocalVar _) this situation is not suit for global
 -- pointers. So it belongs the last case.
 safeAssign a b = do
-                 newVar 0
+                 dupVar b
                  let a' = amendVar 1 a
-                     b' = amendVar 1 b
-                 _assignAdd (LocalVar 0) b'
-                 clearVar a
-                 _assignAdd b (LocalVar 0)
+                 clearVar a'
+                 _assignAdd a' (LocalVar 0)
                  stackDrop 1
 
 
@@ -530,6 +538,22 @@ _doLogOR a b =
           raw "]"
           gotoVar res -- until now, res == 0
           raw ">>[[-]<<+>>]<<"
+
+-- | evaluate @a > b@ ,
+--   the result will pushed in the stack as a new local variable
+_doGT :: Variable
+      -- ^ @a@
+      -> Variable
+      -- ^ @b@
+      -> CodeGen
+_doGT a b = do
+            dupVar a
+            dupVar b
+            let a' = amendVar 2 a
+                b' = amendVar 2 b
+            undefined
+            stackDrop 1
+
 
 -- @result = a + b@
 --

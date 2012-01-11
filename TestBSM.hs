@@ -26,6 +26,16 @@ testNewVar n = genCode $
           setJump 0
           end
 
+testSafeAssign = genCode $
+        do
+          begin ( pushChar 'Y' )
+          stackEnlarge 1
+          safeAssign (LocalVar 0) (GlobalVar 1)
+          gotoVar (LocalVar 0)
+          raw "."
+          setJump 0
+          end
+
 testLocalVar = genCode $
         do
           begin ( pushChar '\n' >> pushChar 'u' >> pushChar 'w' )
@@ -359,6 +369,9 @@ runTest = do
           quickCheck $ \i ->
                        let x = (abs i) `rem` 256
                        in  runBF (testNewVar x) "" == [(toEnum x) :: Char]
+
+          putStrLn "testSafeAssign:"
+          quickCheck $ "Y" == runBF testSafeAssign ""
 
           putStrLn "test_assignAdd:"
           quickCheck $ "Wu\n" == runBF test_assignAdd ""
