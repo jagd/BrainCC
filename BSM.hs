@@ -159,19 +159,40 @@ clearJump = setJump 0
 
 -- ** Variable operations: define , assign , modify , delete , move to
 
--- | allocate a new variable at the top of the stack
---   and move the current Unit to it.
---   /temp/ would be dirty
+-- | Push a constant @n@ at the top of the stack.
+--   This process would use several new temp variables
+--   and make the temp of this Unit dirty
 newVar :: Int
-       -- ^ the value of this variable
+       -- ^ n
        -> CodeGen
 newVar n = do
            stackLast
            raw ">+" -- move to the stack flag & clean it
            loop (unitElements - 1) $ raw ">" -- move to the next Unit
-           raw "[-]" -- reset the value
-           incConstant n -- set the value
+           raw "[-]" -- the target := 0
+           f n -- dirty assign
            raw ">[-]<" -- set the stack top flag & align
+        where
+           base = 10
+           neg "+" = "-"
+           neg "-" = "+"
+           f n | n > 0 = g n "+"
+               | n < 0 = g (-n) "-"
+               | otherwise = return ()
+           g n op | n == 0 = return () -- this case will not be executed
+                  | n <= base = loop n $ raw op
+                    -- (n == base) inclusived,
+                    -- the next cell will not be 0
+                  | otherwise = do
+                                loop (n `rem` base) $ raw op
+                                raw ">[-]"
+                                g (n `div` base) op
+                                raw "["
+                                raw $ neg op
+                                raw "<"
+                                loop base $ raw op
+                                raw ">]"
+                                raw "<"
 
 -- | push a char into the stack and goto it
 pushChar :: Char
@@ -342,14 +363,6 @@ incConstant :: Int
 incConstant n | n > 0 = loop n $ raw "+"
               | n < 0 = loop (-n) $ raw "-"
               | otherwise = return ()
-
--- | Push a constant @n@ at the top of the stack.
---   This process would use several new temp variables
---   and make the temp of this Unit dirty
-pushConstant :: Int
-             -- ^ constant @n@
-             -> CodeGen
-pushConstant = undefined
 
 
 -- | assign @b@ to @a@

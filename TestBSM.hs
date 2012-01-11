@@ -18,6 +18,14 @@ testFrame2 = genCode $
           setJump 0
           end
 
+testNewVar n = genCode $
+        do
+          begin ( return () )
+          newVar n
+          raw "."
+          setJump 0
+          end
+
 testLocalVar = genCode $
         do
           begin ( pushChar '\n' >> pushChar 'u' >> pushChar 'w' )
@@ -322,14 +330,33 @@ testNE a b = genCode $
           end
 
 runTest = do
+          putStrLn "testFrame1:"
           quickCheck $ "" == runBF testFrame1 ""
+
+          putStrLn "testFrame2:"
           quickCheck $ "" == runBF testFrame2 ""
+
+          putStrLn "testLocalVar:"
           quickCheck $ "wu\n" == runBF testLocalVar ""
+
+          putStrLn "testNewVar:"
+          quickCheck $ \i ->
+                       let x = (abs i) `rem` 256
+                       in  runBF (testNewVar x) "" == [(toEnum x) :: Char]
+
+          putStrLn "test_assignAdd:"
           quickCheck $ "Wu\n" == runBF test_assignAdd ""
+
+          putStrLn "testStackDrop:"
           quickCheck $ "Wu\n" == runBF testStackDrop ""
+
+          putStrLn "testAmendVar:"
           quickCheck $ "Wu\n" == runBF testAmendVar ""
+
+          putStrLn "testArray:"
           quickCheck $ "XYZ\n" == runBF testArray ""
 
+          putStrLn "test_doLogAND  && testDoLogAND:"
           quickCheck $ \(i, j) ->
                        let x = i `rem` 128
                            y = j `rem` 128
@@ -341,6 +368,7 @@ runTest = do
                                    then "Y\n"
                                    else ""
 
+          putStrLn "test_doLogOR  && testDoLogOR:"
           quickCheck $ \(i, j) ->
                        let x = i `rem` 128
                            y = j `rem` 128
@@ -352,6 +380,7 @@ runTest = do
                                    then "Y\n"
                                    else ""
 
+          putStrLn "testEQ:"
           quickCheck $ \(i, j) ->
                        let x = i `rem` 128
                            y = j `rem` 128
@@ -360,6 +389,7 @@ runTest = do
                              then "Y\n"
                              else ""
 
+          putStrLn "testNE:"
           quickCheck $ \(i, j) ->
                        let x = i `rem` 128
                            y = j `rem` 128
