@@ -380,42 +380,42 @@ testDoMinus a b = genCode $
           end
 
 runTest = do
-          putStrLn "testFrame1:"
+          putStrLn "Test Frame1:"
           quickCheck $ "" == runBF testFrame1 ""
 
-          putStrLn "testFrame2:"
+          putStrLn "Test Frame2:"
           quickCheck $ "" == runBF testFrame2 ""
 
-          putStrLn "testLocalVar:"
+          putStrLn "LocalVar:"
           quickCheck $ "wu\n" == runBF testLocalVar ""
 
-          putStrLn "testNewVar:"
+          putStrLn "newVar:"
           quickCheck $ \i ->
                        let x = (abs i) `rem` 256
                        in  runBF (testNewVar x) "" == [(toEnum x) :: Char]
 
-          putStrLn "testSafeAssign:"
+          putStrLn "safeAssign:"
           quickCheck $ "Y" == runBF testSafeAssign ""
 
-          putStrLn "test_assignAdd:"
+          putStrLn "_assignAdd:"
           quickCheck $ "Wu\n" == runBF test_assignAdd ""
 
-          putStrLn "testStackDrop:"
+          putStrLn "stackDrop:"
           quickCheck $ "Wu\n" == runBF testStackDrop ""
 
-          putStrLn "testAmendVar:"
+          putStrLn "amendVar:"
           quickCheck $ "Wu\n" == runBF testAmendVar ""
 
-          putStrLn "testArray:"
+          putStrLn "Test Array:"
           quickCheck $ "XYZ\n" == runBF testArray ""
 
-          putStrLn "testDoLogNOT:"
+          putStrLn "doLogNOT:"
           quickCheck $ \i ->
                        let x = (i `rem` 128) `div` 10
                        in  runBF (testDoLogNOT x) "" ==
                            if x == 0 then "Y\n" else ""
 
-          putStrLn "test_doLogAND  && testDoLogAND:"
+          putStrLn "_doLogAND && doLogAND:"
           quickCheck $ \(i, j) ->
                        let x = i `rem` 128
                            y = j `rem` 128
@@ -427,7 +427,7 @@ runTest = do
                                    then "Y\n"
                                    else ""
 
-          putStrLn "test_doLogOR  && testDoLogOR:"
+          putStrLn "_doLogOR  && doLogOR:"
           quickCheck $ \(i, j) ->
                        let x = i `rem` 128
                            y = j `rem` 128
