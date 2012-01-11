@@ -375,6 +375,28 @@ unsafeAssign :: Variable
        -> CodeGen
 unsafeAssign a b = clearVar a >> _assignAdd a b
 
+
+-- | @a = b@
+safeAssign :: Variable
+       -- ^ a
+       -> Variable
+       -- ^ b
+       -> CodeGen
+safeAssign a b | a == b = return ()
+safeAssign a@(LocalVar _) b@(LocalVar _) =  unsafeAssign a b
+safeAssign a@(GlobalVar _) b@(GlobalVar _) =  unsafeAssign a b
+-- a@(GlobalVar _) b@(LocalVar _) this situation is not suit for global
+-- pointers. So it belongs the last case.
+safeAssign a b = do
+                 newVar 0
+                 let a' = amendVar 1 a
+                     b' = amendVar 1 b
+                 _assignAdd (LocalVar 0) b'
+                 clearVar a
+                 _assignAdd b (LocalVar 0)
+                 stackDrop 1
+
+
 -- | do logical NOT on the current /Unit/.
 --
 -- This operation does not allocate new variables on the stack,
@@ -386,27 +408,36 @@ curLogNOT = do
             -- if (temp) ~~~~ if (!curr.old) then curr = 1 else keep 0
             raw ">>[<<+>>+]<<"
 
+-- | @result = !x@
+--
+-- it is /safe/, but expansive
+doLogNOT :: Variable
+         -- ^ @result@
+         -> Variable
+         -- ^ @x@
+         -> CodeGen
+doLogNOT r x = do
+               _doLogNOT x
+               unsafeAssign (amendVar 1 r) (LocalVar 0)
+               stackDrop 1
 
--- | @a = b@
-safeAssign :: Variable
-       -- ^ a
-       -> Variable
-       -- ^ b
-       -> CodeGen
-safeAssign a b | a == b = return ()
-safeAssign a@(LocalVar _) b@(LocalVar _) =  unsafeAssign a b
-safeAssign a@(GlobalVar _) b@(GlobalVar _) =  unsafeAssign a b
-safeAssign a b = do
-                 newVar 0
-                 let a' = amendVar 1 a
-                     b' = amendVar 1 b
-                 _assignAdd (LocalVar 0) b'
-                 clearVar a
-                 _assignAdd b (LocalVar 0)
-                 stackDrop 1
--- a@(GlobalVar _) b@(LocalVar _) this situation is not suit for global
--- pointers. So it belongs the last case.
-
+-- | logical NOT on any variable,
+--
+--   the result will be a new variable at the stack top.
+--
+--   Finally located at the stack top /Unit/ (the result)
+_doLogNOT :: Variable -> CodeGen
+_doLogNOT v = do
+             newVar 0
+             raw ">>[-]+<<" -- new var's temp := 1
+             let v' = amendVar 1 v
+             gotoVar v'
+             raw "[" -- if (v')
+             stackLast -- goto the new Variable
+             raw ">>-<<" -- new var's temp := 0
+             raw "]" -- now: new var == 0
+             stackLast -- goto the new Variable
+             raw ">>[-<<+>>]<<" -- if (temp) then newVar := 1
 
 -- | @result = a && b@
 --
@@ -423,6 +454,42 @@ doLogAND r a b = do
                  unsafeAssign (amendVar 1 r) (LocalVar 0)
                  stackDrop 1
 
+-- | logical AND on two variables,
+--
+--   the result will be a new variable at the stack top.
+--
+--   Finally located at the stack top /Unit/ (the result).
+--
+--   /unsafe/
+_doLogAND :: Variable -> Variable -> CodeGen
+_doLogAND a b =
+        do
+          newVar 0
+          raw ">>[-]<<" -- res's temp = 0
+          let res = LocalVar 0 -- result
+              a' = amendVar 1 a
+              b' = amendVar 1 b
+              far = max a' b' -- optimization
+              near = min a' b'
+          gotoVar near
+          raw "[" -- if (near)
+          gotoVar res
+          raw ">>+<<" -- res's temp++
+          raw "]"
+          gotoVar near
+          raw "[" -- if (near)
+          gotoVar far
+          raw "[" -- if (far)
+          gotoVar res
+          raw ">>+<<" -- res's temp++
+          raw "]"
+          raw "]"
+          gotoVar res
+          raw "+>>--" -- res := 1 , res's temp -= 2
+          raw "[[+]<<->>]" -- if (res's temp) then temp := 0 , res := 0
+          raw "<<" -- align
+
+
 -- | @result = a || b@
 --
 -- it is /safe/, but expansive
@@ -437,6 +504,36 @@ doLogOR r a b = do
                 _doLogOR a b
                 unsafeAssign (amendVar 1 r) (LocalVar 0)
                 stackDrop 1
+
+-- | logical OR on two variables,
+--
+--   the result will be a new variable at the stack top.
+--
+--   Finally located at the stack top /Unit/ (the result).
+--   /unsafe/
+_doLogOR :: Variable -> Variable -> CodeGen
+_doLogOR a b =
+        do
+          newVar 0
+          raw ">>[-]<<" -- res's temp := 0
+          let res = LocalVar 0 -- result
+              a' = amendVar 1 a
+              b' = amendVar 1 b
+              far = max a' b' -- optimization
+              near = min a' b'
+          -- @ res
+          gotoVar near
+          raw "[" -- if (near)
+          gotoVar res
+          raw ">>+<<"
+          raw "]"
+          gotoVar far
+          raw "[" -- if (far)
+          gotoVar res
+          raw ">>+<<"
+          raw "]"
+          gotoVar res -- until now, res == 0
+          raw ">>[[-]<<+>>]<<"
 
 -- @result = a + b@
 --
@@ -453,6 +550,27 @@ doPlus r a b = do
                unsafeAssign (amendVar 1 r) (LocalVar 0)
                stackDrop 1
 
+-- | calculate the sum of two variables,
+--
+--   @a + b@
+--
+--   the result will be a new variable at the stack top.
+--
+--   /unsafe/
+_doPlus :: Variable
+        -- ^ @a@
+        -> Variable
+        -- ^ @b@
+        -> CodeGen
+_doPlus a b = do
+              newVar 0
+              let a' = amendVar 1 a
+                  b' = amendVar 1 b
+                  res = LocalVar 0
+              _assignAdd res a
+              _assignAdd res b
+
+
 -- @result = a + b@
 --
 -- it is /safe/, but expansive
@@ -468,6 +586,27 @@ doMinus r a b = do
                 unsafeAssign (amendVar 1 r) (LocalVar 0)
                 stackDrop 1
 
+-- | calculate the difference of two variables,
+--
+--   @a - b@
+--
+--   the result will be a new variable at the stack top.
+--
+--   /unsafe/
+_doMinus :: Variable
+         -- ^ @a@
+         -> Variable
+         -- ^ @b@
+         -> CodeGen
+_doMinus a b = do
+               newVar 0
+               let a' = amendVar 1 a
+                   b' = amendVar 1 b
+                   res = LocalVar 0
+               _assignAdd res a
+               _assignMinus res b
+
+
 -- | @r = (a == b)@
 doEQ :: Variable
      -- ^ @r@
@@ -480,6 +619,16 @@ doEQ r a b = do
              _doEQ a b
              unsafeAssign (amendVar 1 r) (LocalVar 0)
              stackDrop 1
+
+-- | evaluate the express @a == b@ ,
+--   result will be stored on a new Unit at the stack top.
+_doEQ :: Variable
+      -- @a@
+      -> Variable
+      -- @b@
+      -> CodeGen
+_doEQ = __doEQ False
+
 
 -- | @r = (a != b)@
 doNE :: Variable
@@ -494,16 +643,6 @@ doNE r a b = do
              unsafeAssign (amendVar 1 r) (LocalVar 0)
              stackDrop 1
 
-
--- | evaluate the express @a == b@ ,
---   result will be stored on a new Unit at the stack top.
-_doEQ :: Variable
-      -- @a@
-      -> Variable
-      -- @b@
-      -> CodeGen
-_doEQ = __doEQ False
-
 -- | evaluate the express @a != b@ ,
 --   result will be stored on a new Unit at the stack top.
 _doNE :: Variable
@@ -512,6 +651,7 @@ _doNE :: Variable
       -- @b@
       -> CodeGen
 _doNE = __doEQ True
+
 
 __doEQ isNE a b = do
             newVar 0
@@ -599,130 +739,6 @@ _assignMinus :: Variable
           -> CodeGen
 _assignMinus = _assign (raw "-")
 
-
--- | calculate the sum of two variables,
---
---   @a + b@
---
---   the result will be a new variable at the stack top.
---
---   /unsafe/
-_doPlus :: Variable
-        -- ^ @a@
-        -> Variable
-        -- ^ @b@
-        -> CodeGen
-_doPlus a b = do
-              newVar 0
-              let a' = amendVar 1 a
-                  b' = amendVar 1 b
-                  res = LocalVar 0
-              _assignAdd res a
-              _assignAdd res b
-
--- | calculate the difference of two variables,
---
---   @a - b@
---
---   the result will be a new variable at the stack top.
---
---   /unsafe/
-_doMinus :: Variable
-         -- ^ @a@
-         -> Variable
-         -- ^ @b@
-         -> CodeGen
-_doMinus a b = do
-               newVar 0
-               let a' = amendVar 1 a
-                   b' = amendVar 1 b
-                   res = LocalVar 0
-               _assignAdd res a
-               _assignMinus res b
-
--- | logical AND on two variables,
---
---   the result will be a new variable at the stack top.
---
---   Finally located at the stack top /Unit/ (the result).
---
---   /unsafe/
-_doLogAND :: Variable -> Variable -> CodeGen
-_doLogAND a b =
-        do
-          newVar 0
-          raw ">>[-]<<" -- res's temp = 0
-          let res = LocalVar 0 -- result
-              a' = amendVar 1 a
-              b' = amendVar 1 b
-              far = max a' b' -- optimization
-              near = min a' b'
-          gotoVar near
-          raw "[" -- if (near)
-          gotoVar res
-          raw ">>+<<" -- res's temp++
-          raw "]"
-          gotoVar near
-          raw "[" -- if (near)
-          gotoVar far
-          raw "[" -- if (far)
-          gotoVar res
-          raw ">>+<<" -- res's temp++
-          raw "]"
-          raw "]"
-          gotoVar res
-          raw "+>>--" -- res := 1 , res's temp -= 2
-          raw "[[+]<<->>]" -- if (res's temp) then temp := 0 , res := 0
-          raw "<<" -- align
-
-
--- | logical OR on two variables,
---
---   the result will be a new variable at the stack top.
---
---   Finally located at the stack top /Unit/ (the result).
---   /unsafe/
-_doLogOR :: Variable -> Variable -> CodeGen
-_doLogOR a b =
-        do
-          newVar 0
-          raw ">>[-]<<" -- res's temp := 0
-          let res = LocalVar 0 -- result
-              a' = amendVar 1 a
-              b' = amendVar 1 b
-              far = max a' b' -- optimization
-              near = min a' b'
-          -- @ res
-          gotoVar near
-          raw "[" -- if (near)
-          gotoVar res
-          raw ">>+<<"
-          raw "]"
-          gotoVar far
-          raw "[" -- if (far)
-          gotoVar res
-          raw ">>+<<"
-          raw "]"
-          gotoVar res -- until now, res == 0
-          raw ">>[[-]<<+>>]<<"
-
--- | logical NOT on any variable,
---
---   the result will be a new variable at the stack top.
---
---   Finally located at the stack top /Unit/ (the result)
-_doLogNOT :: Variable -> CodeGen
-_doLogNOT v = do
-             newVar 0
-             raw ">>[-]+<<" -- new var's temp := 1
-             let v' = amendVar 1 v
-             gotoVar v'
-             raw "[" -- if (v')
-             stackLast -- goto the new Variable
-             raw ">>-<<" -- new var's temp := 0
-             raw "]" -- now: new var == 0
-             stackLast -- goto the new Variable
-             raw ">>[-<<+>>]<<" -- if (temp) then newVar := 1
 
 
 -- | @a = a && b@.

@@ -329,6 +329,22 @@ testNE a b = genCode $
           raw "[-]]"
           end
 
+testDoLogNOT x = genCode $
+        do
+          begin ( return () )
+          clearJump
+          newVar 0
+          newVar x
+          doLogNOT (LocalVar 1) (LocalVar 0)
+          gotoVar (LocalVar 1)
+          raw "["
+          pushChar 'Y'
+          raw "."
+          setCurVar $ fromEnum '\n'
+          raw "."
+          raw "[-]]"
+          end
+
 runTest = do
           putStrLn "testFrame1:"
           quickCheck $ "" == runBF testFrame1 ""
@@ -355,6 +371,12 @@ runTest = do
 
           putStrLn "testArray:"
           quickCheck $ "XYZ\n" == runBF testArray ""
+
+          putStrLn "testDoLogNOT:"
+          quickCheck $ \i ->
+                       let x = (i `rem` 128) `div` 10
+                       in  runBF (testDoLogNOT x) "" ==
+                           if x == 0 then "Y\n" else ""
 
           putStrLn "test_doLogAND  && testDoLogAND:"
           quickCheck $ \(i, j) ->
