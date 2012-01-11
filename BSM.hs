@@ -538,29 +538,6 @@ __doEQ isNE a b = do
             raw "[-]]"
             stackDrop 1
 
-
--- | evaluate the express @a == c@ ,
---   result will be stored on a new Unit at the stack top.
---   @c@ is a constant!
-_doEQC :: Variable
-      -- @a@
-      -> Variable
-      -- @c@
-      -> CodeGen
-_doEQC a c = undefined
-
-
--- | evaluate the express @a != c@ ,
---   result will be stored on a new Unit at the stack top.
---   @c@ is a constant!
-_doNEC :: Variable
-      -- @a@
-      -> Variable
-      -- @c@
-      -> CodeGen
-_doNEC a c = undefined
-
-
 -- | the low-level assign: @ a = f(b) @
 --
 --   finally goto the variable @b@
