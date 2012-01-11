@@ -35,7 +35,6 @@ At the end of each operations, the memory pointer will be aligned at the first
 element of a /Memory Unit/.
 
 The flag /unsafe/  means this operation can not be used at the same variables.
-Those /unsafe/ functions have prefix \"unsafe\" or a underline \"_\"
 
 -}
 
@@ -459,8 +458,6 @@ doLogAND r a b = do
 --   the result will be a new variable at the stack top.
 --
 --   Finally located at the stack top /Unit/ (the result).
---
---   /unsafe/
 _doLogAND :: Variable -> Variable -> CodeGen
 _doLogAND a b =
         do
@@ -510,7 +507,6 @@ doLogOR r a b = do
 --   the result will be a new variable at the stack top.
 --
 --   Finally located at the stack top /Unit/ (the result).
---   /unsafe/
 _doLogOR :: Variable -> Variable -> CodeGen
 _doLogOR a b =
         do
@@ -555,8 +551,6 @@ doPlus r a b = do
 --   @a + b@
 --
 --   the result will be a new variable at the stack top.
---
---   /unsafe/
 _doPlus :: Variable
         -- ^ @a@
         -> Variable
@@ -591,8 +585,6 @@ doMinus r a b = do
 --   @a - b@
 --
 --   the result will be a new variable at the stack top.
---
---   /unsafe/
 _doMinus :: Variable
          -- ^ @a@
          -> Variable
@@ -652,7 +644,7 @@ _doNE :: Variable
       -> CodeGen
 _doNE = __doEQ True
 
-
+-- low level function
 __doEQ isNE a b = do
             newVar 0
             newVar 0
