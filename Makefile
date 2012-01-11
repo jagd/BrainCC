@@ -1,7 +1,7 @@
 .PHONY: all clean
 
-COMPILER="ghc"
-FLAGS="--make"
+COMPILER=ghc
+FLAGS=--make -O2
 
 all: TestBSM
 
