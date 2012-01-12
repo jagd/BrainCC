@@ -356,6 +356,56 @@ testGT a b = genCode $
           raw "[-]]"
           end
 
+testGE a b = genCode $
+        do
+          begin ( return () )
+          clearJump
+          newVar 0
+          newVar a -- LocalVar 1
+          newVar b -- LocalVar 0
+          doGE (LocalVar 2) (LocalVar 1) (LocalVar 0)
+          gotoVar (LocalVar 2)
+          raw "["
+          pushChar 'Y'
+          raw "."
+          setCurVar $ fromEnum '\n'
+          raw "."
+          raw "[-]]"
+          end
+
+testLT a b = genCode $
+        do
+          begin ( return () )
+          clearJump
+          newVar 0
+          newVar a -- LocalVar 1
+          newVar b -- LocalVar 0
+          doLT (LocalVar 2) (LocalVar 1) (LocalVar 0)
+          gotoVar (LocalVar 2)
+          raw "["
+          pushChar 'Y'
+          raw "."
+          setCurVar $ fromEnum '\n'
+          raw "."
+          raw "[-]]"
+          end
+
+testLE a b = genCode $
+        do
+          begin ( return () )
+          clearJump
+          newVar 0
+          newVar a -- LocalVar 1
+          newVar b -- LocalVar 0
+          doLE (LocalVar 2) (LocalVar 1) (LocalVar 0)
+          gotoVar (LocalVar 2)
+          raw "["
+          pushChar 'Y'
+          raw "."
+          setCurVar $ fromEnum '\n'
+          raw "."
+          raw "[-]]"
+          end
 
 testDoLogNOT x = genCode $
         do
@@ -484,6 +534,32 @@ runTest = do
                              then "Y\n"
                              else ""
 
+          putStrLn "doLT:"
+          quickCheck $ \(i, j) ->
+                       let x = (abs i) `rem` 256
+                           y = (abs j) `rem` 256
+                       in  runBF (testLT x y) "" ==
+                           if x < y
+                             then "Y\n"
+                             else ""
+
+          putStrLn "doGE:"
+          quickCheck $ \(i, j) ->
+                       let x = (abs i) `rem` 256
+                           y = (abs j) `rem` 256
+                       in  runBF (testGE x y) "" ==
+                           if x >= y
+                             then "Y\n"
+                             else ""
+
+          putStrLn "doLE:"
+          quickCheck $ \(i, j) ->
+                       let x = (abs i) `rem` 256
+                           y = (abs j) `rem` 256
+                       in  runBF (testLE x y) "" ==
+                           if x <= y
+                             then "Y\n"
+                             else ""
 
           putStrLn "doPlus:"
           quickCheck $ \(i, j) ->

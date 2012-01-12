@@ -553,6 +553,48 @@ doGT r a b = do
              unsafeAssign (amendVar 1 r) (LocalVar 0)
              stackDrop 1
 
+-- | evaluate expression @(a >= b)@ (unsigned) ,
+--   the result will be stored in @r@
+doGE :: Variable
+      -- ^ @r@
+      -> Variable
+      -- ^ @a@
+      -> Variable
+      -- ^ @b@
+      -> CodeGen
+doGE r a b = do
+             _doGE a b
+             unsafeAssign (amendVar 1 r) (LocalVar 0)
+             stackDrop 1
+
+-- | evaluate expression @(a < b)@ (unsigned) ,
+--   the result will be stored in @r@
+doLT :: Variable
+      -- ^ @r@
+      -> Variable
+      -- ^ @a@
+      -> Variable
+      -- ^ @b@
+      -> CodeGen
+doLT r a b = do
+             _doLT a b
+             unsafeAssign (amendVar 1 r) (LocalVar 0)
+             stackDrop 1
+
+-- | evaluate expression @(a <= b)@ (unsigned) ,
+--   the result will be stored in @r@
+doLE :: Variable
+      -- ^ @r@
+      -> Variable
+      -- ^ @a@
+      -> Variable
+      -- ^ @b@
+      -> CodeGen
+doLE r a b = do
+             _doLE a b
+             unsafeAssign (amendVar 1 r) (LocalVar 0)
+             stackDrop 1
+
 
 -- | evaluate @a > b@ (unsigned) ,
 --   the result will pushed in the stack as a new local variable
@@ -569,12 +611,12 @@ _doGT a b = do
                 b' = amendVar 3 b
                 res  = (LocalVar 2)
                 tmp1 = (LocalVar 1)
-                tmp2 = (LocalVar 0) -- as quit var
+                tmp2 = (LocalVar 0) -- always = 0, as quit var
             _assignAdd res a'
             _assignAdd tmp1 b'
 
             gotoVar res
-            raw ">>[-]<<" -- res's temp = 0
+            raw ">>[-]<<" -- res's temp = 0 :: loop flag
 
             raw "[" -- if (res)
             raw ">>+<<" -- then res's temp := 1
@@ -601,6 +643,34 @@ _doGT a b = do
 
             -- if (res.now != 0) then a > b else a <= b
             stackDrop 2
+
+-- | evaluate @a < b@ (unsigned) ,
+--   the result will pushed in the stack as a new local variable
+_doLT :: Variable
+      -- ^ @a@
+      -> Variable
+      -- ^ @b@
+      -> CodeGen
+_doLT = flip _doGT
+
+-- | evaluate @a >= b@ (unsigned) ,
+--   the result will pushed in the stack as a new local variable
+_doGE :: Variable
+      -- ^ @a@
+      -> Variable
+      -- ^ @b@
+      -> CodeGen
+_doGE a b = _doLT a b >> curLogNOT
+
+-- | evaluate @a <= b@ (unsigned) ,
+--   the result will pushed in the stack as a new local variable
+_doLE :: Variable
+      -- ^ @a@
+      -> Variable
+      -- ^ @b@
+      -> CodeGen
+_doLE a b = _doGT a b >> curLogNOT
+
 
 
 -- @result = a + b@
