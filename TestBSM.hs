@@ -187,7 +187,7 @@ test_doLogOR a b = genCode $
           end
 
 -- test (curLogNOT a)
-test8 a = genCode $
+testCurLogNOT a = genCode $
         do
           begin ( return () )
           clearJump
@@ -199,73 +199,6 @@ test8 a = genCode $
           setCurVar $ fromEnum '\n'
           raw "."
           raw "[-]]"
-          end
-
--- test (doLogNOT a)
-test9 a = genCode $
-        do
-          begin ( return () )
-          clearJump
-          newVar a
-          _doLogNOT (LocalVar 0)
-          raw "["
-          pushChar 'Y'
-          raw "."
-          setCurVar $ fromEnum '\n'
-          raw "."
-          raw "[-]]"
-          end
-
--- test (assignLogAND a b)
-test10 a b = genCode $
-        do
-          begin ( return () )
-          clearJump
-          newVar a
-          newVar b
-          _assignLogAND (LocalVar 0) (LocalVar 1)
-          raw "["
-          pushChar 'Y'
-          raw "."
-          setCurVar $ fromEnum '\n'
-          raw "."
-          raw "[-]]"
-          end
-
--- test (assignLogAND a a)
-test11 a = genCode $
-        do
-          begin ( return () )
-          clearJump
-          newVar a
-          _assignLogAND (LocalVar 0) (LocalVar 0)
-          raw "["
-          pushChar 'Y'
-          raw "."
-          setCurVar $ fromEnum '\n'
-          raw "."
-          raw "[-]]"
-          end
-
-test12 = genCode $
-        do
-          begin ( pushChar '\n' >> pushChar 's' >> pushChar 'V' )
-          newVar 1
-          setJump 0
-
-          _assignAdd (LocalVar 1) (LocalVar 0)
-          gotoVar $ LocalVar 1
-          raw "."
-
-          gotoVar $ LocalVar 0
-          _assignAdd (LocalVar 0) (LocalVar 0)
-
-          _assignAdd (LocalVar 2) (LocalVar 0)
-          gotoVar $ LocalVar 2
-          raw "."
-
-          stackDrop 3
-          raw "."
           end
 
 -- test doLogAND
@@ -524,6 +457,12 @@ runTest = do
           quickCheck $ \i ->
                        let x = (i `rem` 128) `div` 10
                        in  runBF (testDoLogNOT x) "" ==
+                           if x == 0 then "Y\n" else ""
+
+          putStrLn "curLogNOT:"
+          quickCheck $ \i ->
+                       let x = (i `rem` 128) `div` 10
+                       in  runBF (testCurLogNOT x) "" ==
                            if x == 0 then "Y\n" else ""
 
           putStrLn "_doLogAND && doLogAND:"
