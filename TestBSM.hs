@@ -473,6 +473,19 @@ testDoMinus a b = genCode $
           raw "."
           end
 
+testDoMul a b = genCode $
+        do
+          begin ( return () )
+          clearJump
+          newVar 0
+          newVar a
+          newVar b
+          doMul (LocalVar 2) (LocalVar 1) (LocalVar 0)
+          gotoVar (LocalVar 2)
+          raw "."
+          end
+
+
 runTest = do
           putStrLn "Test Frame1:"
           quickCheck $ "" == runBF testFrame1 ""
@@ -604,5 +617,12 @@ runTest = do
                            y = j `rem` 127
                        in  runBF (testDoMinus x y) ""
                              == [(toEnum ((x - y + 256) `rem` 256) :: Char)]
+
+          putStrLn "doMul:"
+          quickCheck $ \(i, j) ->
+                       let x = (abs i) `rem` 127
+                           y = (abs j) `rem` 127
+                       in  runBF (testDoMul x y) ""
+                             == [(toEnum ((x * y) `rem` 256) :: Char)]
 
 main = runTest

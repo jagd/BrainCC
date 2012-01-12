@@ -737,6 +737,55 @@ _doMinus a b = do
                _assignMinus res b'
 
 
+-- @result = a * b@
+doMul :: Variable
+      -- ^ @result@
+      -> Variable
+      -- ^ @a@
+      -> Variable
+      -- ^ @b@
+      -> CodeGen
+doMul r a b = do
+                _doMul a b
+                unsafeAssign (amendVar 1 r) (LocalVar 0)
+                stackDrop 1
+
+-- | calculate @a * b@ (unsigned),
+--   the result will be stored in a new variable at the top of the stack
+_doMul a b = do
+             newVar 0 -- the result
+             dupVar (amendVar 1 a) -- if not clone `a` and `b`,
+             dupVar (amendVar 2 b) --    it will be very expensive for Arrays
+
+             -- because of the speed and the overhead
+             -- the following code will not use
+             -- those high-level functions such as gotoVar
+
+             stackLast --b'
+             unitLeft -- a'
+             raw ">>[-]<<" -- a'.temp := 0
+             unitRight
+
+             raw "[" -- while (b' > 0)
+             raw "-" --   then b'--
+             unitLeft -- goto a'
+
+             raw "[" -- while (a' > 0)
+             raw "-" -- a'--
+             raw ">>+<<" -- a'.temp++
+             unitLeft -- result
+             raw "+" -- result++
+             unitRight -- to a'
+             raw "]" -- loop (a')
+
+             -- now, a' == 0
+             raw ">>[-<<+>>]<<" -- a' <= a'.temp
+             unitRight -- to b'
+             raw "]" -- loop (b')
+
+             stackDrop 2 -- drop a' and b'
+
+
 -- | @r = (a == b)@
 doEQ :: Variable
      -- ^ @r@
