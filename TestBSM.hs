@@ -127,6 +127,32 @@ testAmendVar = genCode $
 
           end
 
+testAmendVar2 s = genCode $
+        do
+          begin ( return () )
+          clearJump
+          newVar 1 -- 3
+          newVar 2 -- 2
+          newVar 3 -- 1
+          pushChar 'X' -- 0
+          let base = LocalVar 3
+              elem1 = LocalVar 3
+              elem2 = LocalVar 2
+              elem3 = LocalVar 1
+              elemY = LocalVar 0
+          stackEnlarge s
+          gotoVar $ amendVar s (ArrayVar base elem3)
+          output -- X
+          inc
+          gotoVar $ amendVar s (ArrayVar (ArrayVar base elem2) elem1)
+          output -- also Y
+          inc
+          gotoVar $ amendVar s (ArrayVar base (ArrayVar base elem2))
+          output -- also Z
+          setCurVar $ fromEnum '\n'
+          output -- newline
+          end
+
 -- test a && b
 test_doLogAND a b = genCode $
         do
@@ -473,6 +499,10 @@ runTest = do
 
           putStrLn "amendVar:"
           quickCheck $ "Wu\n" == runBF testAmendVar ""
+
+          putStrLn "amendVar on Array:"
+          quickCheck $ \i -> let x = (abs i) `rem` 50
+                             in runBF (testAmendVar2 x) "" == "XYZ\n"
 
           putStrLn "Test Array:"
           quickCheck $ "XYZ\n" == runBF testArray ""
