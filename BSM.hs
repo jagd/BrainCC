@@ -539,7 +539,22 @@ _doLogOR a b =
           gotoVar res -- until now, res == 0
           raw ">>[[-]<<+>>]<<"
 
--- | evaluate @a > b@ ,
+-- | evaluate expression @(a > b)@ (unsigned) ,
+--   the result will be stored in @r@
+doGT :: Variable
+      -- ^ @r@
+      -> Variable
+      -- ^ @a@
+      -> Variable
+      -- ^ @b@
+      -> CodeGen
+doGT r a b = do
+             _doGT a b
+             unsafeAssign (amendVar 1 r) (LocalVar 0)
+             stackDrop 1
+
+
+-- | evaluate @a > b@ (unsigned) ,
 --   the result will pushed in the stack as a new local variable
 _doGT :: Variable
       -- ^ @a@
@@ -547,12 +562,45 @@ _doGT :: Variable
       -- ^ @b@
       -> CodeGen
 _doGT a b = do
-            dupVar a
-            dupVar b
-            let a' = amendVar 2 a
-                b' = amendVar 2 b
-            undefined
-            stackDrop 1
+            newVar 0
+            newVar 0
+            newVar 0
+            let a' = amendVar 3 a
+                b' = amendVar 3 b
+                res  = (LocalVar 2)
+                tmp1 = (LocalVar 1)
+                tmp2 = (LocalVar 0) -- as quit var
+            _assignAdd res a'
+            _assignAdd tmp1 b'
+
+            gotoVar res
+            raw ">>[-]<<" -- res's temp = 0
+
+            raw "[" -- if (res)
+            raw ">>+<<" -- then res's temp := 1
+            gotoVar tmp2 -- quit
+            raw "]"
+
+            gotoVar res
+            raw ">>[-<<" -- if (res's temp == 1) then res's temp := 0 and align
+
+            raw "[" -- if (res)
+            unitRight -- goto tmp1
+            raw "[" -- if (tmp1)
+            raw "-" -- tmp1--
+            unitLeft
+            raw "-" -- res--
+            raw ">>+<<" -- res.temp++ (== 1)
+            gotoVar tmp2
+            raw "]"
+            gotoVar tmp2
+            raw "]"
+
+            gotoVar res
+            raw ">>]<<"
+
+            -- if (res.now != 0) then a > b else a <= b
+            stackDrop 2
 
 
 -- @result = a + b@

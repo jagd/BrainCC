@@ -339,6 +339,24 @@ testNE a b = genCode $
           raw "[-]]"
           end
 
+testGT a b = genCode $
+        do
+          begin ( return () )
+          clearJump
+          newVar 0
+          newVar a -- LocalVar 1
+          newVar b -- LocalVar 0
+          doGT (LocalVar 2) (LocalVar 1) (LocalVar 0)
+          gotoVar (LocalVar 2)
+          raw "["
+          pushChar 'Y'
+          raw "."
+          setCurVar $ fromEnum '\n'
+          raw "."
+          raw "[-]]"
+          end
+
+
 testDoLogNOT x = genCode $
         do
           begin ( return () )
@@ -456,6 +474,16 @@ runTest = do
                            if x /= y
                              then "Y\n"
                              else ""
+
+          putStrLn "doGT:"
+          quickCheck $ \(i, j) ->
+                       let x = (abs i) `rem` 256
+                           y = (abs j) `rem` 256
+                       in  runBF (testGT x y) "" ==
+                           if x > y
+                             then "Y\n"
+                             else ""
+
 
           putStrLn "doPlus:"
           quickCheck $ \(i, j) ->
