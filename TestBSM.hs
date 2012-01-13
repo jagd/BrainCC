@@ -6,6 +6,8 @@ import Test.QuickCheck
 import BSM
 import BFI (runBF)
 
+setCurVar n = raw "[-]" >> incConstant n
+
 testFrame1 = genCode $
         do
           begin ( return () )
@@ -59,7 +61,7 @@ test_assignAdd = genCode $
           raw "."
 
           gotoVar $ LocalVar 0
-          inc
+          raw "+"
 
           _assignAdd (LocalVar 2) (LocalVar 0)
           gotoVar $ LocalVar 2
@@ -142,15 +144,15 @@ testAmendVar2 s = genCode $
               elemY = LocalVar 0
           stackEnlarge s
           gotoVar $ amendVar s (ArrayVar base elem3)
-          output -- X
-          inc
+          raw "." -- X
+          raw "+"
           gotoVar $ amendVar s (ArrayVar (ArrayVar base elem2) elem1)
-          output -- also Y
-          inc
+          raw "." -- also Y
+          raw "+"
           gotoVar $ amendVar s (ArrayVar base (ArrayVar base elem2))
-          output -- also Z
+          raw "." -- also Z
           setCurVar $ fromEnum '\n'
-          output -- newline
+          raw "." -- newline
           end
 
 -- test a && b
@@ -251,15 +253,15 @@ testArray = genCode $
               elem3 = LocalVar 1
               elemY = LocalVar 0
           gotoVar (ArrayVar base elem3)
-          output -- X
-          inc
+          raw "." -- X
+          raw "+"
           gotoVar (ArrayVar (ArrayVar base elem2) elem1)
-          output -- also Y
-          inc
+          raw "." -- also Y
+          raw "+"
           gotoVar (ArrayVar base (ArrayVar base elem2))
-          output -- also Z
+          raw "." -- also Z
           setCurVar $ fromEnum '\n'
-          output -- newline
+          raw "." -- newline
           end
 
 -- test doEQ

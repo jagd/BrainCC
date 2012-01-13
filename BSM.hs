@@ -54,8 +54,18 @@ loop n m = m >> loop (n-1) m
 unitElements = 4
 
 -- | GlobalVar will be only used for global variables,
---   do not mix it with LocalVar, or the assign will not work rightly.
---   To the Order : ArrayVar is the most expensive and so is PointerVar
+--
+--   Do not mix it with LocalVar, or the (unsafe) assigns may not work rightly.
+--
+--   The Order:
+--
+--   * ArrayVar is the most expensive and so is PointerVar.
+--
+--   * GlobalVar is expensiver als LocalVar
+--
+--   * (LocalVar @n@) is expensiver als (LocalVar @n+1@)
+--
+--   * (GlobalVar @n@) is expensiver als (GlobalVar @n+1@)
 data Variable = LocalVar { localOffset :: Int }
               -- ^ counted backwards from the stack top
               | GlobalVar { globalOffset :: Int }
@@ -114,7 +124,9 @@ end :: CodeGen
 end = stackFirst
    >> raw "]"
 
--- | jump the first (leftmost) element of the Stack ( the jump register )
+-- | Jump to the first (leftmost) element of the Stack ( the global jump mark )
+--
+--   Time: @O(s)@
 stackFirst :: CodeGen
 stackFirst = do
              raw ">+[-" -- move to the flag cell, and look whether it was -1
@@ -124,7 +136,9 @@ stackFirst = do
              -- skip the reserved Unit with align
              loop (unitElements - 1) $ raw ">"
 
--- | jump the last (rightmost) element of the Stack
+-- | Jump to the last (rightmost) element of the Stack
+--
+--   Time: @O(s)@
 stackLast :: CodeGen
 stackLast = do
              raw ">[" -- move to the flag cell
@@ -150,8 +164,8 @@ setJump n = do
           incConstant n -- set
 
 -- | Do not invoke any functions or goto some where.
+--
 --   The program will exit at the end.
---   (Finally goto the /jump/ variable)
 clearJump :: CodeGen
 clearJump = setJump 0
 
@@ -160,7 +174,12 @@ clearJump = setJump 0
 
 -- | Push a constant @n@ at the top of the stack.
 --   This process would use several new temp variables
---   and make the temp of this Unit dirty
+--   and make the temp of this Unit dirty.
+--
+--   The bigger @n@ is, the longer time will this process cost.
+--   Time costs do not grow linear during the increasing of @n@.
+--   For the bigger @n@, this process will be more and more expansive.
+--   In turns, the code length will not grow rapidly.
 newVar :: Int
        -- ^ n
        -> CodeGen
@@ -193,7 +212,8 @@ newVar n = do
                                 raw ">]"
                                 raw "<"
 
--- | push a char into the stack and goto it
+-- | Push a char into the stack and goto it.
+--   It is only a wrap for 'newVar'
 pushChar :: Char
     -- ^ the value of this variable
     -> CodeGen
@@ -201,15 +221,16 @@ pushChar = newVar . fromEnum
 
 
 -- | Push a copy of the Variable @x@ onto the stack top.
+--   As expensive as a normal addition on @x@
 dupVar :: Variable
-       -- ^ x
+       -- ^ @x@
        -> CodeGen
 dupVar x = do
            newVar 0
            _assignAdd (LocalVar 0) (amendVar 1 x)
 
 stackEnlarge :: Int
-             -- ^ Number of addition /Unit/s
+             -- ^ Number of addition /Unit/s on the stack top
              -> CodeGen
 stackEnlarge n = do
         stackLast
@@ -222,9 +243,10 @@ stackEnlarge n = do
               raw "[-]" -- set the stack top flag
 
 stackDrop :: Int
-          -- ^ How many /Unit/s at the stack top will be droped (deleted)
-          --   and goto the stack top
-          --   this number will not be checked!
+          -- ^ How many /Unit/s at the stack top will be droped (deleted).
+          --   Then goto the stack top.
+          --
+          --   /Warning/: This number will not be checked!
           -> CodeGen
 stackDrop n = do
               stackLast
@@ -232,23 +254,34 @@ stackDrop n = do
               loop (n * unitElements) $ raw "<"
               raw "[-]<" -- set the top flag & align
 
--- | move one Unit length towards right
+-- | move one Unit length towards right.
+--
+--   Time: @O(1)@
 unitRight :: CodeGen
 unitRight = loop unitElements $ raw ">"
 
 
 -- | move one Unit length towards left
+--
+--   time: @O(1)@
 unitLeft :: CodeGen
 unitLeft = loop unitElements $ raw "<"
 
 
 -- | Goto the n\'st variable, forwards or backwards:
 --
---   * Global variable \'n\' = 0 means the jump register
+--   Global variable \'n\' = 0 means the jump register
 --
---   * Local variable \'n\' = 0 means the stack top /Unit/
+--   * Time ('GlobalVar') : @O(s)@
+--
+--   Local variable \'n\' = 0 means the stack top /Unit/
+--
+--   * Time ('LocalVar') : @O(s)@
 --
 --   It could be very expensive to adress a ArrayVar
+--
+--   * Time on 'ArrayVar' : expensiver than @O(s*s)@,
+--   @s@ is the stack length (or the base \/ offset locations)
 gotoVar :: Variable -> CodeGen
 
 gotoVar (LocalVar n) = do
@@ -315,8 +348,10 @@ _gotoArrayVar base offset = do
         raw "<<<" -- align
 
 
--- | to fix a old variable due to extra offset from the new allocated stack
+-- | To fix a old variable due to extra offset from the new allocated stack
 --   elements
+--
+--   /This function does not directly influence the runtime brainf**k code./
 amendVar :: Int
          -- ^ how many new variables was allocated after the variable @a@
          -> Variable
@@ -327,23 +362,7 @@ amendVar _ v@(GlobalVar _) = v
 amendVar n (LocalVar x) = LocalVar (x+n)
 amendVar n (ArrayVar b o) = ArrayVar (amendVar n b) (amendVar n o)
 
--- | decreasing the current variable
-dec :: CodeGen
-dec = raw "-"
-
--- | increasing the current variable
-inc :: CodeGen
-inc = raw "+"
-
--- | output a char in the current variable
-output :: CodeGen
-output = raw "."
-
--- | input a char in the current variable
-input :: CodeGen
-input = raw ","
-
--- | @v = 0@
+-- | @v := 0@
 clearVar :: Variable
          -- ^ v
          -> CodeGen
@@ -351,21 +370,17 @@ clearVar v = do
              gotoVar v
              raw "[-]"
 
--- | /temp/ would be dirty
-setCurVar :: Int -> CodeGen
-setCurVar n = raw "[-]" >> incConstant n
-
--- | @v = c@
---
---   @c@ is a constant and its /temp cell/ would be dirty
+-- | @v := c@
 setVar :: Variable
        -- ^ the variable @v@
        -> Int
        -- ^ the constant @c@
        -> CodeGen
-setVar v n = gotoVar v >> setCurVar n
+setVar v n = newVar n
+          >> unsafeAssign v (LocalVar 0)
+          >> stackDrop 1
 
--- | do constant numbers of \"+\" to the current /Unit/,
+-- | Simply do constant numbers of \"+\" to the current /Cell/,
 incConstant :: Int
             -- ^ the constant Integer to be added
             -> CodeGen
@@ -374,22 +389,22 @@ incConstant n | n > 0 = loop n $ raw "+"
               | otherwise = return ()
 
 
--- | assign @b@ to @a@
+-- | Assign @a := b@
 --
--- please ensure @a != b@
+-- Please ensure @a@ and @b@ are not the same /Unit/!
 unsafeAssign :: Variable
-       -- ^ a
+       -- ^ @a@
        -> Variable
-       -- ^ b
+       -- ^ @b@
        -> CodeGen
 unsafeAssign a b = clearVar a >> _assignAdd a b
 
 
--- | @a = b@
+-- | @a := b@
 safeAssign :: Variable
-       -- ^ a
+       -- ^ @a@
        -> Variable
-       -- ^ b
+       -- ^ @b@
        -> CodeGen
 safeAssign a b | a == b = return ()
 safeAssign a@(LocalVar _) b@(LocalVar _) =  unsafeAssign a b
@@ -415,7 +430,7 @@ curLogNOT = do
             -- if (temp) ~~~~ if (!curr.old) then curr = 1 else keep 0
             raw ">>[<<+>>+]<<"
 
--- | @result = !x@
+-- | @result := !x@
 --
 -- it is /safe/, but expansive
 doLogNOT :: Variable
@@ -446,7 +461,7 @@ _doLogNOT v = do
              stackLast -- goto the new Variable
              raw ">>[-<<+>>]<<" -- if (temp) then newVar := 1
 
--- | @result = a && b@
+-- | @result := a && b@
 --
 -- it is /safe/, but expansive
 doLogAND :: Variable
@@ -462,7 +477,6 @@ doLogAND r a b = do
                  stackDrop 1
 
 -- | logical AND on two variables,
---
 --   the result will be a new variable at the stack top.
 --
 --   Finally located at the stack top /Unit/ (the result).
@@ -495,7 +509,7 @@ _doLogAND a b =
           raw "<<" -- align
 
 
--- | @result = a || b@
+-- | @result := a || b@
 --
 -- it is /safe/, but expansive
 doLogOR :: Variable
@@ -673,7 +687,7 @@ _doLE a b = _doGT a b >> curLogNOT
 
 
 
--- @result = a + b@
+-- @result := a + b@
 --
 -- it is /safe/, but expansive
 doPlus :: Variable
@@ -705,7 +719,7 @@ _doPlus a b = do
               _assignAdd res b'
 
 
--- @result = a + b@
+-- @result := a + b@
 --
 -- it is /safe/, but expansive
 doMinus :: Variable
@@ -737,7 +751,9 @@ _doMinus a b = do
                _assignMinus res b'
 
 
--- @result = a * b@
+-- @result := a * b@
+--
+-- Time : expensiver than @O(a*b)@
 doMul :: Variable
       -- ^ @result@
       -> Variable
@@ -752,6 +768,8 @@ doMul r a b = do
 
 -- | calculate @a * b@ (unsigned),
 --   the result will be stored in a new variable at the top of the stack
+--
+-- Time : expensiver than @O(a*b)@
 _doMul a b = do
              newVar 0 -- the result
              dupVar (amendVar 1 a) -- if not clone `a` and `b`,
@@ -786,7 +804,7 @@ _doMul a b = do
              stackDrop 2 -- drop a' and b'
 
 
--- | @r = (a == b)@
+-- | @r := (a == b)@
 doEQ :: Variable
      -- ^ @r@
      -> Variable
@@ -809,7 +827,7 @@ _doEQ :: Variable
 _doEQ = __doEQ False
 
 
--- | @r = (a != b)@
+-- | @r := (a != b)@
 doNE :: Variable
      -- ^ @r@
      -> Variable
@@ -843,21 +861,21 @@ __doEQ isNE a b = do
             _assignAdd tmp b'
             gotoVar res
             raw "["
-            dec
+            raw "-"
             unitRight -- next Unit
-            dec
+            raw "-"
             unitLeft -- prev Unit
             raw "]"
-            when (not isNE) inc -- res := 1
+            when (not isNE) $ raw "+" -- res := 1
             unitRight -- next Unit
             raw "["
             unitLeft -- prev Unit
-            if isNE then inc else dec
+            if isNE then (raw "+") else (raw "-")
             unitRight -- next Unit
             raw "[-]]"
             stackDrop 1
 
--- | the low-level assign: @ a = f(b) @
+-- | the low-level assign: @ a := f(b) @
 --
 --   finally goto the variable @b@
 --
@@ -920,7 +938,7 @@ _assignMinus = _assign (raw "-")
 
 
 
--- | @a = a && b@.
+-- | @a := a && b@.
 --
 --  finally locates at @a@
 --
