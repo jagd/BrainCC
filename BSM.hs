@@ -803,6 +803,92 @@ _doMul a b = do
 
              stackDrop 2 -- drop a' and b'
 
+-- | evaluate @a / b@ (unsigned), assumed @b != 0@.
+--   The quotient will first be pushed.
+--   At last, the remainder will be pushed.
+_doDivRem a b = do
+                -- to avoid array indexing
+                -- only manipulate local variables
+                newVar 0 -- quotient
+                dupVar (amendVar 1 a) -- a'
+                dupVar (amendVar 2 b) -- b'
+                newVar 0 -- tmp1
+                newVar 0 -- tmp2, tmp2.temp = dummy (tmp2)
+
+                let quot = LocalVar 4
+                    a' = LocalVar 3
+                    b' = LocalVar 2
+                    tmp1 = LocalVar 1
+                    tmp2 = LocalVar 0
+
+                gotoVar a'
+                raw ">>[-]<<" -- a'.temp := 0
+                raw "[" -- while (a')
+                raw "-" -- a'--
+                raw ">>[-]+<<" -- a'.temp := 1
+
+                unitRight -- b'
+                unitRight -- tmp1
+                unitRight -- tmp2
+                raw ">>[-]-<<" -- tmp2.temp := -1
+
+                unitLeft -- goto tmp1
+                raw "[" -- if (tmp1)
+                raw "-" -- tmp1--
+                unitRight -- tmp2
+                raw ">>+<<" -- tmp2.temp := 0 then align
+                raw "]" -- endif at tmp2
+
+                gotoVar tmp2
+
+                -- if (tmp2.temp == -1) then tmp2.temp := 0 and tmp2 = 1
+                raw ">>[+<<+>>]<<"
+
+                raw "[" -- if (tmp2 == 1) equivalent to if (tmp1 == 0)
+                        --   then tmp1 := b' - 1
+                raw "-" -- tmp2 := 0
+                gotoVar quot -- quotient++
+                raw "+"
+                _assignAdd tmp1 b' -- tmp1 := b', assume that b != 0
+                -- now at b'
+                unitRight -- goto tmp1
+                raw "-" -- tmp1--
+                unitRight -- goto tmp2
+                raw "]" -- endif at tmp2
+
+                gotoVar a'
+                raw "]" -- endwhile (a')
+                -- at a'
+
+                -- now: a' == 0
+                --      b' == b
+                --      tmp1 == b' or b' - remainder
+                --      tmp2 == 0
+                raw ">>[<<" -- if(a.temp)
+                unitLeft -- goto quotient
+                raw "-" -- then quotient--
+                unitRight -- goto a'
+                raw "]" -- a' == 0, and it was already aligned
+                -- at a
+                -- calculate the remainder
+                unitRight -- b'
+                unitRight -- tmp1
+                raw "[" -- if (tmp1)
+                _assignAdd a' b' -- a' := b'
+                -- at b'
+                unitRight -- goto tmp1
+                raw "[" -- if (tmp1)
+                raw "-" -- tmp1--
+                unitLeft -- b'
+                unitLeft -- a'
+                raw "-" -- a'--
+                unitRight -- b'
+                unitRight -- tmp1'
+                raw "]" -- endif(tmp1)
+                raw "]" -- endif(tmp1)
+
+                stackDrop 3
+
 
 -- | @r := (a == b)@
 doEQ :: Variable
