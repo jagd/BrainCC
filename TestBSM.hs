@@ -421,6 +421,19 @@ testDoMul a b = genCode $
           end
 
 
+test_doDivRem a b = genCode $
+        do
+          begin ( return () )
+          newVar a -- LV 1
+          newVar b -- LV 0
+          _doDivRem  (LocalVar 1) (LocalVar 0)
+          gotoVar (LocalVar 1)
+          raw "."  -- quotient
+          gotoVar (LocalVar 0)
+          raw "." -- remainder
+          clearJump
+          end
+
 runTest = do
           putStrLn "Test Frame1:"
           quickCheck $ "" == runBF testFrame1 ""
@@ -565,5 +578,12 @@ runTest = do
                            y = (abs j) `rem` 127
                        in  runBF (testDoMul x y) ""
                              == [(toEnum ((x * y) `rem` 256) :: Char)]
+
+          putStrLn "_doDivRem:"
+          quickCheck $ \(i, j) ->
+                       let x = (abs i) `rem` 256
+                           y = ((abs j) `rem` 255) + 1 -- y > 0
+                       in  runBF (test_doDivRem x y) ""
+                             == map toEnum [(x `div` y) , (x `rem` y )]
 
 main = runTest
