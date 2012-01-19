@@ -137,7 +137,7 @@ token = getCode >>= \code -> invokeToken code
                           = clearLineBegin >>tokenIdentifier
                   -- process line join directly, transparent to prep. parser
                   | x == '\\' && (not $ null xs) && (head xs) `elem` "\r\n"
-                          = clearLineBegin >> tokenLineJoin
+                          = skipCode 1 >> tokenEOL >> token
                   | x == '"' = clearLineBegin >> tokenRawString
                   | x == '\'' = clearLineBegin >> tokenRawChar
                   | x `elem` "\r\n" = setLineBegin >> tokenEOL
@@ -164,7 +164,7 @@ clearLineBegin = modify $ \s -> s{ isLineBegin = False }
 
 tokenEOL = getCode >>= f
         where
-          f [] = throwError "no newline to token"
+          f [] = return EOF
           f (x:[]) | x `elem` "\r\n" = skipCode 1
                                     >> setLineBegin
                                     >> return EOL
@@ -176,8 +176,16 @@ tokenEOL = getCode >>= f
           f ('\r':_) = skipCode 1 >> return EOL
           f _ = throwError "not a newline"
 
-tokenIdentifier = undefined
-tokenLineJoin = undefined
+tokenIdentifier = getCode >>= f
+        where
+          f [] = return EOF
+          f (x:xs) | x `elem` _azAZ = g [x] xs
+                   | otherwise = throwError "Not a Identifier"
+          g s [] = skipCode (length s) >> return (Identifier s)
+          g s (x:xs) | x `elem` _azAZ09 = g (s ++ [x]) xs
+                     | otherwise = skipCode (length s) >> return (Identifier s)
+
+tokenLineJoin = undefined -- TODO:
 tokenRawChar = undefined
 tokenRawString = undefined
 tokenMacro = undefined
