@@ -138,6 +138,9 @@ token = getCode >>= \code -> invokeToken code
                   -- process line join directly, transparent to prep. parser
                   | x == '\\' && (not $ null xs) && (head xs) `elem` "\r\n"
                           = skipCode 1 >> tokenEOL >> token
+                  -- process ##, transparent to prep. parser
+                  | x == '#' && (not $ null xs) && (head xs) == '#'
+                          = skipCode 2 >> token
                   | x == '"' = clearLineBegin >> tokenRawString
                   | x == '\'' = clearLineBegin >> tokenRawChar
                   | x `elem` "\r\n" = setLineBegin >> tokenEOL
