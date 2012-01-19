@@ -11,12 +11,11 @@
                     #define M(ARGS) ARGS
                     #undef M
 
+                    #if Express
                     #ifdef M
                     #ifndef M
                     #else
                     #endif
-
-                    THIS VERSION OF PREPROCESSOR DO NOT SUPPORT #if
 
                 supported comment style:
                     \/**\/ and \/\/
@@ -97,10 +96,6 @@ data PrepToken = Identifier String
                -- ^ #else
                | ENDIF
                -- ^ #endif
-               | LineContinue
-               -- ^ \\'NewLine' at the end of a line , only in #define
-               | NewLine
-               -- ^ regex: [\\r\\n]* will reset the flag for #commands
                | RawString String
                -- ^ c string with \"\" and escape \\
                | RawChar String
@@ -108,7 +103,9 @@ data PrepToken = Identifier String
                | COMMA
                -- ^ the , char
                | OtherToken String
-               -- ^ seperate by spaces or nonspaces
+               -- ^ seperate by spaces
+               | EOL
+               -- ^ regex: [\\r\\n]* will reset the flag for #commands
                | EOF
 
 data PrepState = PrepState {
@@ -122,43 +119,65 @@ type PrepParser a = ErrorT String (StateT PrepState (WriterT String IO)) a
 
 _azAZ = ['a'..'z'] ++ ['A'..'Z'] ++ ['_']
 _azAZ09 = ['a'..'z'] ++ ['A'..'Z'] ++ ['_'] ++ ['0'..'9']
+standardEOL = "\n"
 
 token :: PrepParser PrepToken
-token = get >>= return . restCode
-            >>= \code -> invokeToken code
+token = getCode >>= \code -> invokeToken code
         where
           invokeToken [] = return EOF
           invokeToken (x:xs)
                   | x == '#'
                       = get >>= return . isLineBegin >>=
                       \lb -> if lb
-                               then tokenMacro
+                               then clearLineBegin >> tokenMacro
                                else do
                                     l <- getLineNumber
                                     throwError ("illegal # at line " ++ show l)
                   | x `elem` _azAZ
-                          = tokenIdentifier
+                          = clearLineBegin >>tokenIdentifier
+                  -- process line join directly, transparent to prep. parser
                   | x == '\\' && (not $ null xs) && (head xs) `elem` "\r\n"
-                          = tokenLineContinue
-                  | x == '"' = tokenRawString
-                  | x == '\'' = tokenRawChar
-                  | x `elem` "\r\n" = tokenNewLine
-                  | x == ',' = do
-                               skipCode 1
-                               tell " "
-                               return COMMA
-                  | otherwise = tokenOther
+                          = clearLineBegin >> tokenLineJoin
+                  | x == '"' = clearLineBegin >> tokenRawString
+                  | x == '\'' = clearLineBegin >> tokenRawChar
+                  | x `elem` "\r\n" = setLineBegin >> tokenEOL
+                  -- skip whitspaces, transparent to prep. parser
+                  | x `elem` " \t" = tell [x] >> skipCode 1 >> token
+                  | x == ',' = clearLineBegin >> skipCode 1 >> return COMMA
+                  | otherwise = clearLineBegin >> tokenOther
 
 
 getLineNumber :: PrepParser Int
 getLineNumber = get >>= return . lineNumber
 
 skipCode :: Int -> PrepParser ()
-skipCode offset = undefined
+skipCode offset = modify $ \s -> s {restCode = drop offset (restCode s)}
 
-tokenNewLine = undefined
+getCode :: PrepParser String
+getCode = get >>= return . restCode
+
+setLineBegin :: PrepParser ()
+setLineBegin = modify $ \s -> s{ isLineBegin = True }
+
+clearLineBegin :: PrepParser ()
+clearLineBegin = modify $ \s -> s{ isLineBegin = False }
+
+tokenEOL = getCode >>= f
+        where
+          f [] = throwError "no newline to token"
+          f (x:[]) | x `elem` "\r\n" = skipCode 1
+                                    >> setLineBegin
+                                    >> return EOL
+                   | otherwise = throwError "not a newline"
+          f ('\r':'\n':_) = skipCode 2 >> return EOL
+          -- delete this "\n\r" case?
+          f ('\n':'\r':_) = skipCode 2 >> return EOL
+          f ('\n':_) = skipCode 1 >> return EOL
+          f ('\r':_) = skipCode 1 >> return EOL
+          f _ = throwError "not a newline"
+
 tokenIdentifier = undefined
-tokenLineContinue = undefined
+tokenLineJoin = undefined
 tokenRawChar = undefined
 tokenRawString = undefined
 tokenMacro = undefined
