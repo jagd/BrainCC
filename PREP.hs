@@ -60,9 +60,20 @@
 
 module PREP where
 
-import qualified Data.Map as M
+{-
 
-type SourceCode = String
+The arguments of a macro have higher privileg as the other macros.
+e.g.:
+
+#define M1 "M1"
+#define M2(M1) M1 + 2
+
+M2(1)        => results 1 + 2, not "M1" + 2
+
+-}
+
+import qualified Data.Map as M
+import CToken
 
 -- | remove \/* .. *\/ comments
 removeCommentBlock :: SourceCode -> SourceCode
@@ -99,75 +110,24 @@ isSpace' ' ' = True
 isSpace' _ = False
 
 
-data CSymbol = S_LP -- ^ (
-             | S_RP -- ^ )
-             | S_COMMA -- ^ ,
-             | S_LC -- ^ {
-             | S_RC -- ^ }
-             | S_LB -- ^ [
-             | S_RB -- ^ ]
-             | S_DOT -- ^ .
-             | S_AND -- ^ &
-             | S_STAR -- ^ \*
-             | S_PLUS -- ^ +
-             | S_MINUS -- ^ \-
-             | S_NEGATE -- ^ ~
-             | S_NOT -- ^ !
-             | S_DIV -- ^ \/
-             | S_MOD -- ^ %
-             | S_LT -- ^ <
-             | S_GT -- ^ \>
-             | S_XOR -- ^ ^
-             | S_OR -- ^ |
-             | S_QUESTION -- ^ ?
-             | S_COLON -- ^ :
-             | S_SEMICOLON -- ^ ;
-             | S_ASSIGN -- ^ =
-             | S_ARROW -- ^ \->
-             | S_ICR -- ^ ++
-             | S_DECR -- ^ \--
-             | S_LS -- ^ <<
-             | S_RS -- ^ >>
-             | S_LE -- ^ <=
-             | S_GE -- ^ >=
-             | S_EQ -- ^ ==
-             | S_NE -- ^ !=
-             | S_ANDAND -- ^ &&
-             | S_OROR -- ^ ||
-             | S_MULT_ASSIGN -- ^ \*=
-             | S_DIV_ASSIGN -- ^ \/=
-             | S_MOD_ASSIGN -- ^ %=
-             | S_PLUS_ASSIGN -- ^ +=
-             | S_MINUS_ASSIGN -- ^ \-=
-             | S_LS_ASSIGN -- ^ <<=
-             | S_RS_ASSIGN -- ^ \>>=
-             | S_AND_ASSIGN -- ^ &=
-             | S_OR_ASSIGN -- ^ |=
-             | S_XOR_ASSIGN -- ^ |=
-             | S_ELLIPSIS -- ^ ...
-
-
-data CToken = CTok_Identifier SourceCode
-            | CTok_Symbol CSymbol
-            | CTok_String SourceCode
-            | CTok_Number -- FIXME
-            | CTok_Keyword -- FIXME
-            | CTok_EOL
-            | CTok_EOF
-
--- | tokens for the preprocessor
-data CPrepToken =
-        CPTok_INCLUDE -- ^ #include
-      | CPTok_DEFINE -- ^ #define
-      | CPTok_IF -- ^ #if
-      | CPTok_IFDEF -- ^ #ifdef
-      | CPTok_IFNDEF -- ^ #ifndef
-      | CPTok_ELSE -- ^ #else
-      | CPTok_ENDIF -- ^ #endif
-      | CPTok_RawString SourceCode -- ^ string with \"\" and escape \\
-      | CPTok_RawChar SourceCode -- ^ char with \'\' and escape \\
-      | CPTok_Symbol CSymbol -- ^ only the preprocessor relevant symbols
-      | CPTok_Other -- ^ other tokens, that the preprocessor do not care
+-- | Tokens for the preprocessor
+data CPrepToken = CPTok_INCLUDE -- ^ #include
+                | CPTok_DEFINE -- ^ #define
+                | CPTok_IF -- ^ #if
+                | CPTok_IFDEF -- ^ #ifdef
+                | CPTok_IFNDEF -- ^ #ifndef
+                | CPTok_ELSE -- ^ #else
+                | CPTok_ENDIF -- ^ #endif
+                | CPTok_RawString SourceCode
+                -- ^ string with \" \" and escape \\
+                | CPTok_RawChar SourceCode
+                -- ^ char with \' \' and escape \\
+                | CPTok_Symbol CSymbol
+                -- ^ only the preprocessor relevant symbols
+                | CPTok_Other SourceCode
+                -- ^ other tokens, that the preprocessor do not care
+                | CPTok_EOL
+                | CPTok_EOF
 
 
 -- type PrepParser a = ErrorT String (StateT PrepState (WriterT String IO)) a
