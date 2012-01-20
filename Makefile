@@ -16,3 +16,6 @@ clean:
 	-rm *.o
 	-rm *.hi
 	-rm TestBSM
+
+distclean: clean
+	-rm -r doc
